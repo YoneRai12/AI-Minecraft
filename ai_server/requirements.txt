@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+requests
+pydantic
+discord.py[voice]==2.6.4
+discord-ext-voice-recv==0.5.2a179
+python-dotenv>=1.0.0
+httpx
+numpy
+scipy
+webrtcvad-wheels
+faster-whisper
