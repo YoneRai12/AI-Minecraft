@@ -1,0 +1,14 @@
+# User Secrets
+.env
+ai_server/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
