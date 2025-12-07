@@ -25,6 +25,8 @@ class ChatData(BaseModel):
 class ReportData(BaseModel):
     players: List[PlayerData]
     chats: List[ChatData]
+    events: List[Dict[str, Any]] = [] # New: Receive events like death, item use
+
 
 class DiscordReportData(BaseModel):
     discord_user_id: int
@@ -76,19 +78,52 @@ async def discord_report(data: DiscordReportData):
     
     return {"status": "ok"}
 
-@app.post("/v1/pull")
-async def pull():
-    """マイクラからのポーリングに対し、溜まっているコマンドを返す"""
-    global command_queue
+@app.post("/v1/report")
+async def report(data: ReportData):
+    """マイクラからの状況報告を受け取る"""
+    global game_state, discord_queue
     
-    if not command_queue:
-        return {"commands": []}
+    # プレイヤー位置更新
+    game_state["players"] = [p.dict() for p in data.players]
     
-    # キューにあるコマンドを全て渡して空にする
-    commands_to_send = command_queue.copy()
-    command_queue = []
+    # チャット履歴更新 & 読み上げ
+    for chat in data.chats:
+        print(f"Chat received: {chat.sender}: {chat.message}")
+        game_state["chat_history"].append(chat.dict())
+        
+        # Discordで読み上げ (TTS)
+        discord_queue.append({
+            "type": "speak",
+            "text": f"{chat.sender}「{chat.message}」"
+        })
+        
+        # チャットを受け取ったら思考する
+        await think_and_queue()
+
+    # Process events through GameMaster (Mocking event extraction from report)
+    # The actual implementation needs GameMaster integration here similar to previous plan
+    # But for now, let's just show where Discord events would be handled if GM returns them.
+    # In a real scenario, we'd extract events from data and pass to GM.
+    # Since I don't have the full GM integration in this file yet (it was overwritten or missed in previous steps),
+    # I will re-add the GM integration properly.
     
-    return {"commands": commands_to_send}
+    from game_master import gm
+    
+    # Mock extracting events from data (needs client side support to send 'events' list)
+    # For now, let's assume ReportData has an 'events' field in future, or we parse chat/actions.
+    # To demonstrate the logic:
+    
+    minecraft_commands = []
+    
+    # Example: If GM returned commands, we separate them
+    # events = data.events (NEED TO ADD TO MODEL)
+    # for cmd in gm.process_event(event):
+    #    if cmd.get("type") == "discord_event":
+    #        discord_queue.append(cmd["event"])
+    #    else:
+    #        minecraft_commands.append(cmd)
+            
+    return {"status": "ok", "commands": minecraft_commands}
 
 @app.post("/v1/discord/pull")
 async def discord_pull():

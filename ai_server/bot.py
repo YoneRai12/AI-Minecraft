@@ -74,6 +74,28 @@ async def poll_server_for_speech():
                                         await speaker.speak_wav(target_vc, wav)
                                     except Exception as e:
                                         print(f"[TTS Error] {e}")
+
+                            elif event.get("type") == "mute":
+                                user_id = event.get("discord_id")
+                                if user_id and target_vc and target_vc.guild:
+                                    member = target_vc.guild.get_member(int(user_id))
+                                    if member:
+                                        try:
+                                            await member.edit(mute=True, reason="Dead in Minecraft")
+                                            print(f"[Mute] Executed for {member.display_name}")
+                                        except Exception as e:
+                                            print(f"[Mute Error] {e}")
+
+                            elif event.get("type") == "unmute":
+                                user_id = event.get("discord_id")
+                                if user_id and target_vc and target_vc.guild:
+                                    member = target_vc.guild.get_member(int(user_id))
+                                    if member:
+                                        try:
+                                            await member.edit(mute=False, reason="Revived/GameReset")
+                                            print(f"[Unmute] Executed for {member.display_name}")
+                                        except Exception as e:
+                                            print(f"[Unmute Error] {e}")
             except Exception as e:
                 # 接続エラーなどは無視してリトライ
                 pass

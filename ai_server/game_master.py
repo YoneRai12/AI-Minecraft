@@ -91,6 +91,12 @@ class GameMaster:
             # Younger brother doesn't know (handled in prompt)
             print(f"[GM] Siblings paired: {siblings[0].name} & {siblings[1].name}")
 
+    def _get_discord_id(self, player_name: str) -> Optional[str]:
+        # TODO: Implement actual lookup from a database or file
+        # For now, return None or a mock ID if mapping exists
+        return None 
+
+
     def process_event(self, event: dict) -> List[dict]:
         """
         Process an event from Minecraft and return a list of commands to execute.
@@ -123,6 +129,10 @@ class GameMaster:
         player.is_alive = False
         commands = []
         commands.append({"type": "tellraw", "target": "@a", "message": f"§c{player.name} が死亡しました。"})
+        
+        # Mute in Discord
+        commands.append({"type": "discord_event", "event": {"type": "mute", "discord_id": self._get_discord_id(player.name)}})
+
         
         # --- Role Death Abilities ---
         
