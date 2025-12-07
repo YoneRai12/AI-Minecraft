@@ -53,25 +53,6 @@ def call_llm(prompt: str) -> Optional[str]:
         if response.status_code == 200:
             return json.loads(response.text)["response"]
         else:
-            print(f"LLM Error: {response.status_code}")
-            return None
-    except Exception as e:
-        print(f"LLM Connection Error: {e}")
-        return None
-
-@app.post("/v1/report")
-async def report(data: ReportData):
-    """マイクラからの状況報告を受け取る"""
-    global game_state
-    
-    # プレイヤー位置更新
-    game_state["players"] = [p.dict() for p in data.players]
-    
-    # チャット履歴更新
-    for chat in data.chats:
-        print(f"Chat received: {chat.sender}: {chat.message}")
-        game_state["chat_history"].append(chat.dict())
-        
         # チャットを受け取ったら思考する
         await think_and_queue()
 
