@@ -55,10 +55,12 @@ def call_llm(prompt: str) -> Optional[str]:
         if response.status_code == 200:
             return json.loads(response.text)["response"]
         else:
-        # チャットを受け取ったら思考する
-        await think_and_queue()
+            print(f"LLM Error: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"LLM Connection Error: {e}")
+        return None
 
-    return {"status": "ok"}
 
 @app.post("/v1/discord/report")
 async def discord_report(data: DiscordReportData):
