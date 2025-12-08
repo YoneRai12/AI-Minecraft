@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voxel Debug Viewer</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #info {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+<div id="info">Waiting for data...</div>
+
+<!-- Import map shim for bare specifiers if needed, but unpkg works usually -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  // Axes: Y is Up in ThreeJS, same as MC
+  
+  const camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(20, 20, 20);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 0);
+  controls.update();
+
+  const light = new THREE.DirectionalLight(0xffffff, 1.0);
+  light.position.set(20, 50, 20);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040));
+
+  scene.add(new THREE.AxesHelper(5));
+
+  // Instanced Mesh for blocks
+  let solidMesh = null;
+  let pathLine = null;
+  // Bot Marker
+  const botGeo = new THREE.ConeGeometry(0.4, 1, 8);
+  const botMat = new THREE.MeshBasicMaterial({color: 0xff0000});
+  const botMesh = new THREE.Mesh(botGeo, botMat);
+  botMesh.position.set(0, 0, 0);
+  scene.add(botMesh);
+
+  function rebuildSceneFromSnapshot(snap) {
+    const infoEl = document.getElementById("info");
+    infoEl.textContent =
+      `Player: ${snap.player.name} | Dim: ${snap.player.dimension} | Cells: ${snap.grid.length}`;
+
+    // Updates
+    if (solidMesh) {
+      scene.remove(solidMesh);
+      solidMesh.geometry.dispose();
+      solidMesh.material.dispose();
+      solidMesh = null;
+    }
+    
+    // Parse
+    const { radius, halfHeight, width, height, grid } = snap;
+    
+    // Count solids
+    let count = 0;
+    for (let v of grid) {
+      if (v !== 0) count++;
+    }
+    
+    if (count > 0) {
+        const boxGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+        const mat = new THREE.MeshLambertMaterial(); 
+        solidMesh = new THREE.InstancedMesh(boxGeo, mat, count);
+        
+        const m = new THREE.Matrix4();
+        const color = new THREE.Color();
+        
+        // JS loop matches Python logic:
+        // dy (outer), dz, dx (inner)
+        // grid index increments on dx
+        
+        let idx = 0;
+        let instanceIdx = 0;
+        
+        for (let dy = -halfHeight; dy <= halfHeight; dy++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const v = grid[idx++];
+                    if (v !== 0) {
+                        m.makeTranslation(dx, dy, dz);
+                        solidMesh.setMatrixAt(instanceIdx, m);
+                        
+                        // Color
+                        if (v === 1) color.setHex(0xaaaaaa); // Solid
+                        else if (v === 2) color.setHex(0x0000ff); // Liquid
+                        
+                        solidMesh.setColorAt(instanceIdx, color);
+                        instanceIdx++;
+                    }
+                }
+            }
+        }
+        
+        solidMesh.instanceMatrix.needsUpdate = true;
+        if (solidMesh.instanceColor) solidMesh.instanceColor.needsUpdate = true;
+        scene.add(solidMesh);
+    }
+  }
+
+  async function fetchAndUpdate() {
+    try {
+      const res = await fetch("/v1/debug/voxel");
+      if (res.status !== 200) return;
+      const snap = await res.json();
+      if (snap.error) return;
+      
+      rebuildSceneFromSnapshot(snap);
+    } catch (e) {
+      // console.warn(e);
+    }
+  }
+
+  setInterval(fetchAndUpdate, 500); // 0.5s poll
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>
