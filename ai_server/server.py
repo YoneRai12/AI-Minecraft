@@ -227,6 +227,8 @@ async def command_request(cmd: CommandRequest):
         "player": cmd.player,
         "target": cmd.target
     }
+    # type="camera_control", target="next" or "stop"
+    
     command_queue.append(target_action)
     return {"status": "queued"}
 
