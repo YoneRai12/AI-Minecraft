@@ -2,6 +2,7 @@ import { world, system } from "@minecraft/server";
 import { http, HttpRequest, HttpRequestMethod } from "@minecraft/server-net";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import "./bot_manager.js"; // GameTestの登録
+import "./camera_director.js"; // 自動撮影カメラマン
 
 // ===== Voxel Sensor config =====
 const VOXEL_ENDPOINT = "http://127.0.0.1:8080/v1/mc/state"; // Port 8080 as per server.py

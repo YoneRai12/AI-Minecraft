@@ -1,12 +1,19 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 import requests
 import json
 import random
+import os
 from typing import List, Optional, Dict, Any
 
 app = FastAPI()
+
+# Mount Debug Frontend
+if not os.path.exists("debug_frontend"):
+    os.makedirs("debug_frontend", exist_ok=True)
+app.mount("/debug", StaticFiles(directory="debug_frontend", html=True), name="debug")
 
 # 設定
 OLLAMA_URL = "http://localhost:11434/api/generate"
