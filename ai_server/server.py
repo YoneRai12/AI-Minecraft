@@ -53,6 +53,11 @@ class VoxelSnapshot(BaseModel):
 @app.post("/v1/mc/state")
 def receive_state(snapshot: VoxelSnapshot):
     """マイクラからの視界データ(Voxel)を受け取る"""
+    
+    # Save to file for debug/visualization
+    with open("latest_voxel.json", "w") as f:
+        f.write(snapshot.json())
+
     # 軽快にログだけ出す (Debug用)
     print(
         f"[VOXEL] {snapshot.player.name} "
