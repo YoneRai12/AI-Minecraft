@@ -110,36 +110,144 @@ function postVoxelSnapshot(snapshot) {
 }
 
 // 定期実行ループ
-let voxelTickCounter = 0;
+// 定期実行ループ
+let tickCounter = 0;
 
 system.runInterval(() => {
-    voxelTickCounter++;
+    tickCounter++;
 
-    // 間引き
-    if (voxelTickCounter % VOXEL_INTERVAL_TICKS !== 0) {
-        return;
-    }
-
-    const players = world.getAllPlayers(); // world.getPlayers is deprecated or needs args
-    for (const p of players) {
-        // タグチェック
-        if (p.hasTag(AI_TAG)) {
-            try {
-                const snapshot = buildVoxelSnapshotForPlayer(p);
-                postVoxelSnapshot(snapshot);
-            } catch (e) {
-                console.warn("Sensor Error:", e);
+    // 1. Voxel Sensor (Every 4 ticks)
+    if (tickCounter % VOXEL_INTERVAL_TICKS === 0) {
+        const players = world.getAllPlayers();
+        for (const p of players) {
+            if (p.hasTag(AI_TAG)) {
+                try {
+                    const snapshot = buildVoxelSnapshotForPlayer(p);
+                    postVoxelSnapshot(snapshot);
+                } catch (e) { }
             }
         }
     }
+
+    // 2. Bot Motion Polling (Every 2 ticks) - A* Movement
+    if (tickCounter % 2 === 0) {
+        const players = world.getAllPlayers();
+        for (const p of players) {
+            if (p.hasTag(AI_TAG)) {
+                pollNextMove(p);
+            }
+        }
+    }
+
+    // 3. Global Command Polling (Every 20 ticks = 1 sec) - TP, Events
+    if (tickCounter % 20 === 0) {
+        pollGlobalCommands();
+    }
+
 }, 1);
 
-if (item.typeId === "minecraft:stick") {
-    // UIを表示するために system.run を使用して次ティックで実行
-    system.run(() => {
-        showMainMenu(player);
-    });
+function pollNextMove(player) {
+    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/next_move");
+    req.method = HttpRequestMethod.Post;
+    req.headers = [["Content-Type", "application/json"]];
+    req.body = JSON.stringify({});
+
+    http.request(req).then(resp => {
+        if (resp.status === 200) {
+            try {
+                const cmd = JSON.parse(resp.body);
+                executeBotAction(player, cmd);
+            } catch (e) { }
+        }
+    }).catch(e => { });
 }
+
+function pollGlobalCommands() {
+    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/commands");
+    req.method = HttpRequestMethod.Get; // GET
+
+    http.request(req).then(resp => {
+        if (resp.status === 200) {
+            try {
+                const data = JSON.parse(resp.body);
+                const commands = data.commands || [];
+                for (const cmd of commands) {
+                    processGlobalCommand(cmd);
+                }
+            } catch (e) { }
+        }
+    }).catch(e => { });
+}
+
+// Bot Action Execution (A* / Movement)
+function executeBotAction(player, cmd) {
+    if (cmd.type === "idle") return;
+
+    if (cmd.type === "move_to") {
+        const tx = cmd.target.x;
+        const ty = cmd.target.y;
+        const tz = cmd.target.z;
+
+        // Relative to Player Location -> World Pos
+        const currentPos = player.location;
+        const targetWorldPos = {
+            x: Math.floor(currentPos.x) + tx + 0.5,
+            y: Math.floor(currentPos.y) + ty,
+            z: Math.floor(currentPos.z) + tz + 0.5
+        };
+
+        player.lookAtLocation(targetWorldPos);
+        player.moveRelative(0, 1); // Walk forward
+
+        if (cmd.method === "jump_up" || cmd.method === "long_jump") {
+            player.jump();
+            player.setSprinting(true);
+        } else if (cmd.method === "walk") {
+            player.setSprinting(false);
+        }
+    }
+}
+
+// Global Command Processing (TP, Chat, Title)
+function processGlobalCommand(cmd) {
+    // cmd: { action, player, target, message... }
+
+    if (cmd.action === "tp") {
+        // cmd.player (Victim Name), cmd.target (Survivor Name)
+        try {
+            const victim = world.getAllPlayers().find(p => p.name === cmd.player || p.nameTag === cmd.player);
+            const target = world.getAllPlayers().find(p => p.name === cmd.target || p.nameTag === cmd.target);
+
+            if (victim && target) {
+                const tPos = target.location;
+                victim.teleport(tPos, { dimension: target.dimension });
+            }
+        } catch (e) { }
+    }
+    else if (cmd.action === "chat") {
+        world.sendMessage(cmd.message);
+    }
+    else if (cmd.action === "title") {
+        // cmd.target usually selector like @a
+        try {
+            for (const p of world.getAllPlayers()) {
+                p.onScreenDisplay.setTitle(cmd.title, { subtitle: cmd.subtitle });
+            }
+        } catch (e) { }
+    }
+}
+
+// (Existing itemUse listener)
+world.beforeEvents.itemUse.subscribe((event) => {
+    const player = event.source;
+    const item = event.itemStack;
+
+    if (item.typeId === "minecraft:stick") {
+        system.run(() => {
+            // Define showMainMenu if needed or assume it exists below
+            if (typeof showMainMenu === 'function') showMainMenu(player);
+        });
+    }
 });
 
 /**
