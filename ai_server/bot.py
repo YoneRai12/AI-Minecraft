@@ -246,11 +246,29 @@ class DeathView(discord.ui.View):
             options = [discord.SelectOption(label=name, value=name) for name in self.survivors[:25]] # Max 25
             self.add_item(TpSelect(options, victim_mc_name))
 
-    @discord.ui.button(label="ミュート解除 (30秒)", style=discord.ButtonStyle.green, custom_id="unmute_30s")
+    @discord.ui.button(label="次の人を観戦 (Next)", style=discord.ButtonStyle.primary, row=1)
+    async def next_cam(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._send_cam_cmd(interaction, "next", "カメラターゲットを切り替えます...")
+
+    @discord.ui.button(label="観戦終了 (Stop)", style=discord.ButtonStyle.secondary, row=1)
+    async def stop_cam(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._send_cam_cmd(interaction, "stop", "観戦モードを終了します...")
+
+    async def _send_cam_cmd(self, interaction, sub_action, msg):
+        cmd = {
+            "type": "camera_control",
+            "player": self.victim_mc_name,
+            "target": sub_action # reusing target field for sub_action (next/stop)
+        }
+        async with httpx.AsyncClient() as client:
+             await client.post(f"{POST_BASE}/v1/mc/command_request", json=cmd)
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @discord.ui.button(label="ミュート解除 (30秒)", style=discord.ButtonStyle.green, custom_id="unmute_30s", row=2)
     async def unmute_30s(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_unmute(interaction, 30)
 
-    @discord.ui.button(label="ずっと解除", style=discord.ButtonStyle.red, custom_id="unmute_forever")
+    @discord.ui.button(label="ずっと解除", style=discord.ButtonStyle.red, custom_id="unmute_forever", row=2)
     async def unmute_forever(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_unmute(interaction, None)
 

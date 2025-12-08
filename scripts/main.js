@@ -209,12 +209,13 @@ function executeBotAction(player, cmd) {
     }
 }
 
-// Global Command Processing (TP, Chat, Title)
+// Global Command Processing (TP, Chat, Title, Camera)
+import { forceNextTarget, stopCamera } from "./camera_director.js";
+
 function processGlobalCommand(cmd) {
     // cmd: { action, player, target, message... }
 
     if (cmd.action === "tp") {
-        // cmd.player (Victim Name), cmd.target (Survivor Name)
         try {
             const victim = world.getAllPlayers().find(p => p.name === cmd.player || p.nameTag === cmd.player);
             const target = world.getAllPlayers().find(p => p.name === cmd.target || p.nameTag === cmd.target);
@@ -225,11 +226,20 @@ function processGlobalCommand(cmd) {
             }
         } catch (e) { }
     }
+    else if (cmd.action === "camera_control") {
+        const subAction = cmd.target;
+        const playerName = cmd.player;
+
+        if (subAction === "next") {
+            forceNextTarget(playerName);
+        } else if (subAction === "stop") {
+            stopCamera(playerName);
+        }
+    }
     else if (cmd.action === "chat") {
         world.sendMessage(cmd.message);
     }
     else if (cmd.action === "title") {
-        // cmd.target usually selector like @a
         try {
             for (const p of world.getAllPlayers()) {
                 p.onScreenDisplay.setTitle(cmd.title, { subtitle: cmd.subtitle });
@@ -237,6 +247,21 @@ function processGlobalCommand(cmd) {
         } catch (e) { }
     }
 }
+
+// Mobile Friendly Chat Commands
+world.beforeEvents.chatSend.subscribe((event) => {
+    const msg = event.message.trim().toLowerCase();
+    const player = event.sender;
+
+    if (msg === "!next" || msg === "!skip") {
+        event.cancel = true;
+        forceNextTarget(player.name);
+    }
+    else if (msg === "!stop" || msg === "!quit") {
+        event.cancel = true;
+        stopCamera(player.name);
+    }
+});
 
 // (Existing itemUse listener)
 world.beforeEvents.itemUse.subscribe((event) => {
