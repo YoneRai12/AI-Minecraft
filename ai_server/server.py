@@ -34,6 +34,34 @@ class DiscordReportData(BaseModel):
     t0: float
     t1: float
 
+# --- Voxel Sensor Models ---
+class PlayerInfo(BaseModel):
+    name: str
+    pos: dict
+    rot: Optional[dict] = None
+    dimension: str
+
+class VoxelSnapshot(BaseModel):
+    player: PlayerInfo
+    origin: dict
+    radius: int
+    halfHeight: int
+    width: int
+    height: int
+    grid: List[int]
+
+@app.post("/v1/mc/state")
+def receive_state(snapshot: VoxelSnapshot):
+    """マイクラからの視界データ(Voxel)を受け取る"""
+    # 軽快にログだけ出す (Debug用)
+    print(
+        f"[VOXEL] {snapshot.player.name} "
+        f"at ({snapshot.origin['x']},{snapshot.origin['y']},{snapshot.origin['z']}) "
+        f"cells={len(snapshot.grid)}"
+    )
+    # ここに parkour_brain.update(snapshot) を挟む予定
+    return {"ok": True}
+
 # ゲーム状態とコマンドキュー
 game_state = {
     "chat_history": [],
@@ -139,6 +167,40 @@ async def discord_pull():
     discord_queue = []
     
     return {"events": events_to_send}
+
+    return {"events": events_to_send}
+
+class GameConfig(BaseModel):
+    roles: Dict[str, int]
+
+@app.post("/v1/game/start")
+async def start_game():
+    """Discord等からゲーム開始をトリガーする"""
+    from game_master import gm
+    # Current config (can be stored in game_state)
+    # For now, default or last config
+    config = game_state.get("role_config", {"werewolf": 1})
+    gm.start_game(config)
+    
+    # Send start message to Discord
+    discord_queue.append({
+        "type": "message",
+        "channel_id": "DEFAULT",
+        "content": "**ゲームを開始しました！** 🎮"
+    })
+    discord_queue.append({
+        "type": "speak",
+        "text": "ゲームを開始します。各プレイヤーに役職を配布しました。"
+    })
+    
+    return {"status": "started", "config": config}
+
+@app.post("/v1/game/config")
+async def config_game(config: GameConfig):
+    """役職構成を設定する"""
+    game_state["role_config"] = config.roles
+    print(f"Game Config Updated: {config.roles}")
+    return {"status": "updated", "config": config.roles}
 
 async def think_and_queue():
     """AIに思考させ、結果をコマンドキュー(マイクラ&Discord)に追加する"""
