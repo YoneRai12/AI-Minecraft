@@ -211,10 +211,23 @@ class GameMaster:
         if not alive_villagers and alive_werewolves:
              self.state.winner = "werewolf"
              commands.append({"type": "title", "target": "@a", "title": "§4人狼陣営の勝利！", "subtitle": "村人が全滅しました"})
+             
+             # Report to Discord
+             discord_msg = f"**【試合終了】**\n勝者: **人狼陣営** 🐺\n生存者: {', '.join([p.name for p in alive_werewolves])}"
+             commands.append({"type": "discord_event", "event": {"type": "speak", "text": "人狼陣営の勝利です！"}})
+             commands.append({"type": "discord_event", "event": {"type": "message", "channel_id": "DEFAULT", "content": discord_msg}})
+             commands.append({"type": "discord_event", "event": {"type": "unmute_all"}}) # Unmute everyone
+
         elif not alive_werewolves and alive_villagers:
              self.state.winner = "villager"
              commands.append({"type": "title", "target": "@a", "title": "§a村人陣営の勝利！", "subtitle": "人狼を殲滅しました"})
              
+             # Report to Discord
+             discord_msg = f"**【試合終了】**\n勝者: **村人陣営** 🛡️\n生存者: {', '.join([p.name for p in alive_villagers])}"
+             commands.append({"type": "discord_event", "event": {"type": "speak", "text": "村人陣営の勝利です！"}})
+             commands.append({"type": "discord_event", "event": {"type": "message", "channel_id": "DEFAULT", "content": discord_msg}})
+             commands.append({"type": "discord_event", "event": {"type": "unmute_all"}})
+
         return commands
 
 # Global Instance

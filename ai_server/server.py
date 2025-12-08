@@ -58,14 +58,38 @@ def receive_state(snapshot: VoxelSnapshot):
     with open("latest_voxel.json", "w") as f:
         f.write(snapshot.json())
 
-    # 軽快にログだけ出す (Debug用)
-    print(
-        f"[VOXEL] {snapshot.player.name} "
-        f"at ({snapshot.origin['x']},{snapshot.origin['y']},{snapshot.origin['z']}) "
-        f"cells={len(snapshot.grid)}"
-    )
-    # ここに parkour_brain.update(snapshot) を挟む予定
+    # --- Parkour Logic (Simplified for now) ---
+    from parkour_brain import brain
+    
+    # 1. Update Brain
+    brain.update_state(snapshot.dict())
+    
+    # 2. Find Target (Mock: Just go 5 blocks forward relative to player rot?)
+    # For now, let's try to search for a path to a nearby block (e.g. forward 3)
+    # Ideally we find the 'target' player's relative pos.
+    # Player global pos: snapshot.player.pos
+    # We don't have target info in this payload yet (only 'ai' players send state).
+    # We will need the Main Loop in server.py to set a 'Goal' for the brain.
+    
+    # 仮: 常に「前方に進む」ことを試みるテスト
+    # Rotation to Vec
+    # rot_y = snapshot.player.rot['y']
+    # But here we just return 'ok' as the client polls for commands separately?
+    # Or we can return the next move command immediately!
+    
+    # Let's return the simplified command here if possible, or queue it.
+    
     return {"ok": True}
+    
+@app.post("/v1/mc/next_move")
+def get_next_move(player_name: str = "Bot"): # query param usually? or body. changing to just get/post
+    """クライアントが次の移動コマンドを問い合わせる用"""
+    from parkour_brain import brain
+    
+    # Get calculated action
+    action = brain.get_next_action()
+    
+    return action
 
 # ゲーム状態とコマンドキュー
 game_state = {
@@ -174,6 +198,34 @@ async def discord_pull():
     return {"events": events_to_send}
 
     return {"events": events_to_send}
+
+class CommandRequest(BaseModel):
+    type: str
+    player: str
+    target: Optional[str] = None
+
+@app.post("/v1/mc/command_request")
+async def command_request(cmd: CommandRequest):
+    """Discord Botからのコマンドキュー追加リクエスト"""
+    # Simply push to command_queue for Minecraft to pick up
+    target_action = {
+        "action": cmd.type,
+        "player": cmd.player,
+        "target": cmd.target
+    }
+    command_queue.append(target_action)
+    return {"status": "queued"}
+
+@app.get("/v1/mc/commands")
+def poll_commands():
+    """Minecraft側が溜まっているコマンドを取りに来る"""
+    global command_queue
+    if not command_queue:
+        return {"commands": []}
+    
+    cmds = command_queue.copy()
+    command_queue = [] # Clear
+    return {"commands": cmds}
 
 class GameConfig(BaseModel):
     roles: Dict[str, int]
