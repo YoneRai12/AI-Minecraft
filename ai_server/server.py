@@ -53,8 +53,17 @@ class VoxelSnapshot(BaseModel):
 @app.post("/v1/mc/state")
 def receive_state(snapshot: VoxelSnapshot):
     """マイクラからの視界データ(Voxel)を受け取る"""
+    global latest_voxel_snapshot
     
-    # Save to file for debug/visualization
+    # Update global state for visualizer
+    latest_voxel_snapshot = snapshot.dict()
+    # Add path if available from brain (Mock for now or extract)
+    # If we want to show the path *AI planned*, we should grab it from Brain.
+    from parkour_brain import brain
+    # Ideally brain updates its internal state when we call update_state below.
+    # But path is calculated on 'get_next_action' or we can store last path.
+    
+    # Save to file for debug/visualization (Legacy)
     with open("latest_voxel.json", "w") as f:
         f.write(snapshot.json())
 
@@ -64,22 +73,20 @@ def receive_state(snapshot: VoxelSnapshot):
     # 1. Update Brain
     brain.update_state(snapshot.dict())
     
-    # 2. Find Target (Mock: Just go 5 blocks forward relative to player rot?)
-    # For now, let's try to search for a path to a nearby block (e.g. forward 3)
-    # Ideally we find the 'target' player's relative pos.
-    # Player global pos: snapshot.player.pos
-    # We don't have target info in this payload yet (only 'ai' players send state).
-    # We will need the Main Loop in server.py to set a 'Goal' for the brain.
-    
-    # 仮: 常に「前方に進む」ことを試みるテスト
-    # Rotation to Vec
-    # rot_y = snapshot.player.rot['y']
-    # But here we just return 'ok' as the client polls for commands separately?
-    # Or we can return the next move command immediately!
-    
-    # Let's return the simplified command here if possible, or queue it.
-    
     return {"ok": True}
+
+latest_voxel_snapshot = None
+
+@app.get("/v1/debug/voxel")
+def get_latest_voxel():
+    if latest_voxel_snapshot is None:
+        return {"error": "no data"}
+    
+    # Inject current brain path if available
+    from parkour_brain import brain
+    # This is trickier if brain is not stateful per player or strictly coupled.
+    # For now just return voxel.
+    return latest_voxel_snapshot
     
 @app.post("/v1/mc/next_move")
 def get_next_move(player_name: str = "Bot"): # query param usually? or body. changing to just get/post
