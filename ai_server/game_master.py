@@ -133,6 +133,24 @@ class GameMaster:
         # Mute in Discord
         commands.append({"type": "discord_event", "event": {"type": "mute", "discord_id": self._get_discord_id(player.name)}})
 
+        # Ghost Initialization (Adventure Mode + Invis)
+        commands.append({"type": "gamemode", "target": player.name, "mode": "adventure"})
+        commands.append({"type": "tag", "target": player.name, "tag": "ghost", "mode": "add"})
+        commands.append({"type": "effect", "target": player.name, "effect": "invisibility", "duration": 999999, "amplifier": 0, "hideParticles": True})
+        commands.append({"type": "effect", "target": player.name, "effect": "resistance", "duration": 999999, "amplifier": 255, "hideParticles": True})
+        
+        # Give Ghost Items with Descriptions (Lore)
+        # Amethyst: Unmute
+        commands.append({
+            "type": "command", 
+            "command": f'give "{player.name}" minecraft:amethyst_shard 1 0 {{"minecraft:item_lock":{{"mode":"lock_in_inventory"}}, "display":{{"Name":"§dミュート解除 (Unmute)","Lore":["§7右クリックで","§7Discordミュートを解除"]}}}}'
+        })
+        # Feather: To Spectator
+        commands.append({
+            "type": "command", 
+            "command": f'give "{player.name}" minecraft:feather 1 0 {{"minecraft:item_lock":{{"mode":"lock_in_inventory"}}, "display":{{"Name":"§b観戦モードへ (Spectate)","Lore":["§7右クリックで","§7壁抜け観戦モードへ移行"]}}}}'
+        })
+
         
         # --- Role Death Abilities ---
         

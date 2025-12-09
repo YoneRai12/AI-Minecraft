@@ -84,16 +84,79 @@ def receive_state(snapshot: VoxelSnapshot):
 
 latest_voxel_snapshot = None
 
-@app.get("/v1/debug/voxel")
+class GameEvent(BaseModel):
+    type: str
+    victim: str
+    attacker: str
+    timestamp: float
+
+@app.post("/v1/mc/events")
+def receive_event(evt: GameEvent):
+    """マイクラからのイベント受信"""
+    if evt.type == "hit":
+        print(f"🔥 {evt.victim} was hit by {evt.attacker}!")
+        # Update Brain Target
+        from parkour_brain import brain
+        brain.set_target_player(evt.attacker)
+        
+    return {"status": "ok"}
+
+class UnmuteRequest(BaseModel):
+    mcName: str
+
+@app.post("/v1/discord/unmute")
+def request_unmute(req: UnmuteRequest):
+    """Ghost Modeからのミュート解除リクエスト"""
+    # Simply fire a 'speak' event or specialized unmute event that bot polls
+    # We reuse 'discord_report' queue logic?
+    # Or create a new event type in the shared queue which bot polls via /pull
+    
+    # We append to 'events' queue that bot.py polls.
+    # Where is that queue stored?
+    # server.py doesn't seem to have a persistent event queue for Discord polling in the snippet I saw?
+    # Let's check 'ChatData' or 'ReportData'?
+    # Ah, 'command_queue' is for MC.
+    # We need a queue for Discord.
+    
+    # Let's add it to a global 'discord_events' list if not exists, or just print for now if bot.py polls logs (unlikely).
+    # Re-reading bot.py (Step 984), it polls POST_BASE/v1/discord/pull.
+    # Let's check server.py endpoint for /pull.
+    # If not found, I need to add it.
+    
+    global discord_events
+    discord_events.append({
+        "type": "mute", # Using 'mute' with 'target' to force unmute?
+        # unique event for unmuting
+        "type": "unmute_request",
+        "mc_name": req.mcName
+    })
+    return {"status": "ok"}
+
+discord_events = []
+
+@app.post("/v1/discord/pull")
+def pull_discord_events():
+    global discord_events
+    events = discord_events[:]
+    discord_events = []
+    # return events wrapped
+    return {"events": events}
+
 def get_latest_voxel():
     if latest_voxel_snapshot is None:
         return {"error": "no data"}
     
     # Inject current brain path if available
     from parkour_brain import brain
-    # This is trickier if brain is not stateful per player or strictly coupled.
-    # For now just return voxel.
-    return latest_voxel_snapshot
+    data = latest_voxel_snapshot.copy()
+    
+    # Add debug info
+    if brain.target_pos:
+        data["DEBUG_target"] = brain.target_pos
+    if brain.path:
+         data["path"] = brain.path # Ensure brain path is list of dicts or convertible
+
+    return data
     
 @app.post("/v1/mc/next_move")
 def get_next_move(player_name: str = "Bot"): # query param usually? or body. changing to just get/post

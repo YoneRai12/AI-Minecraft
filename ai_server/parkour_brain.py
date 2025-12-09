@@ -11,6 +11,12 @@ class ParkourBrain:
         self.half_height = 0
         self.origin = (0, 0, 0)
         self.player_pos_relative = (0, 0, 0) # Usually 0 unless offset
+        self.target_player = None # Name of player to chase
+        self.target_pos = None # (x,y,z) relative debug
+        self.path = [] # Debug path
+        
+    def set_target_player(self, name):
+        self.target_player = name
 
     def update_state(self, snapshot_data):
         """Update the internal voxel state from the snapshot"""
@@ -191,37 +197,55 @@ class ParkourBrain:
 
         return neighbors
 
-    def get_next_action(self):
+    def get_next_action(self, target_rel_pos=None):
         """
         Determine the next immediate action for the bot.
         Returns a dict: {"type": "move"|"jump"|"turn", "params": {...}}
         """
+        self.target_pos = target_rel_pos # Store for debug
+        
         # 1. Determine Target
-        # For Phase 4 Step 1, we just want to run forward 3-5 blocks if possible,
-        # or towards a specific relative coordinate if we actually had a target.
-        # Let's try to find a "standable" block 3 blocks ahead in current facing direction?
-        # Since we don't track bot rotation in Brain class perfectly yet (we get it in update),
-        # let's assume we want to go to relative (0, 0, 3) [Forward] for testing.
+        target = target_rel_pos
         
-        target = (0, 0, 3) 
+        if target is None:
+            # Fallback: Wander (Pick a random standable spot nearby)
+            # Try 5 times
+            import random
+            for _ in range(5):
+                rx = random.randint(-5, 5)
+                rz = random.randint(-5, 5)
+                if self._is_standable(rx, 0, rz):
+                    target = (rx, 0, rz)
+                    break 
         
-        # Check if target is valid, if not, try slightly different ones
+        if target is None:
+            return {"type": "idle", "msg": "No target/path"}
+            
+        # Check if target is valid standable, if not, scan vicinity
         if not self._is_standable(target[0], target[1], target[2]):
-            # Try finding ANY valid standable spot forward
-            found = False
-            for z in [3, 2, 1]:
-                for x in [0, 1, -1]:
-                    if self._is_standable(x, 0, z):
-                        target = (x, 0, z)
-                        found = True
-                        break
-                if found: break
-                
+            # Spiral search for nearest standable block to target
+            best_t = None
+            min_d = 999
+            for dy in [0, 1, -1, 2, -2]:
+                for dx in range(-2, 3):
+                    for dz in range(-2, 3):
+                        tx, ty, tz = target[0]+dx, target[1]+dy, target[2]+dz
+                        if self._is_standable(tx, ty, tz):
+                            d = dx*dx + dy*dy + dz*dz
+                            if d < min_d:
+                                min_d = d
+                                best_t = (tx, ty, tz)
+            if best_t:
+                target = best_t
+            else:
+                 return {"type": "idle", "msg": "Target unreachable"}
+
         # 2. Calculate Pth
-        path = self.calculate_path(target)
+        self.path = self.calculate_path(target) # Store for debug
+        path = self.path
         
         if not path:
-            return {"type": "idle", "msg": "No path found"}
+             return {"type": "idle", "msg": "No path found"}
             
         # 3. Convert first step to Action
         # Path[0] is the NEXT node (Start node is excluded or is previous?)
