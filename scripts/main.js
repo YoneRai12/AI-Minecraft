@@ -3,6 +3,7 @@ import { http, HttpRequest, HttpRequestMethod } from "@minecraft/server-net";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import "./bot_manager.js"; // GameTestの登録
 import "./camera_director.js"; // 自動撮影カメラマン
+import "./ghost_spectator.js"; // ハイブリッド観戦モード
 
 // ===== Voxel Sensor config =====
 const VOXEL_ENDPOINT = "http://127.0.0.1:8080/v1/mc/state"; // Port 8080 as per server.py
@@ -275,6 +276,41 @@ world.beforeEvents.itemUse.subscribe((event) => {
         });
     }
 });
+
+// Report Hits to Server (For Chase AI)
+world.afterEvents.entityHit.subscribe((event) => {
+    const victim = event.hitEntity;
+    const attacker = event.entity;
+
+    // Check if victim is our AI Bot (Has tag)
+    if (victim.typeId === "minecraft:player" && victim.hasTag(AI_TAG)) {
+        // Send event to server
+        // We can piggyback on the next state update, or send immediately.
+        // Sending immediately is better for reaction speed.
+
+        let attackerName = "Unknown";
+        if (attacker && attacker.typeId === "minecraft:player") {
+            attackerName = attacker.name;
+        }
+
+        const payload = {
+            type: "hit",
+            victim: victim.name,
+            attacker: attackerName,
+            timestamp: Date.now()
+        };
+
+        sendEventToServer(payload);
+    }
+});
+
+function sendEventToServer(eventData) {
+    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/events");
+    req.method = HttpRequestMethod.Post;
+    req.headers = [["Content-Type", "application/json"]];
+    req.body = JSON.stringify(eventData);
+    http.request(req).catch(e => { }); // Fire and forget
+}
 
 /**
  * メインメニューを表示する関数
