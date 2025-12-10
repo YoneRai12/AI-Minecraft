@@ -27,7 +27,7 @@ from discord_speaker import DiscordSpeaker
 import asyncio
 import httpx
 
-POST_BASE = os.getenv("MC_API_BASE", "http://127.0.0.1:8080")
+POST_BASE = os.getenv("MC_API_BASE", "http://127.0.0.1:8082")
 audio = AudioProcessor(post_url=POST_BASE)
 speaker = DiscordSpeaker()
 
@@ -48,6 +48,13 @@ async def on_ready():
     speaker.start()
     # Serverからのポーリング開始
     bot.loop.create_task(poll_server_for_speech())
+
+@bot.command()
+async def sync(ctx):
+    """コマンドを強制同期する (出てこない人用)"""
+    logging.info("Syncing commands...")
+    await bot.tree.sync(guild=ctx.guild)
+    await ctx.send(f"✅ コマンドをこのサーバー ({ctx.guild.id}) に同期しました！少し待ってから `/` を入力し直してください。")
 
 import json
 
@@ -73,7 +80,92 @@ def save_id_mapping():
         logging.error(f"Failed to save ID mapping: {e}")
 
 # Call load on start
+# Call load on start
 load_id_mapping()
+
+# Role Constants for UI
+AVAILABLE_ROLES = [
+    "villager", "werewolf", "seer", "medium", "bodyguard", "madman",
+    "vampire", "immoral", "wolf_seer", "drunkard", "accomplice"
+]
+
+class RoleConfigView(discord.ui.View):
+    def __init__(self, current_config=None):
+        super().__init__(timeout=None)
+        self.config = current_config.copy() if current_config else {"werewolf": 1}
+        self.selected_role = AVAILABLE_ROLES[0]
+        self.update_select_options()
+
+    def update_select_options(self):
+        # Update default value of select menu
+        self.role_select.options.clear()
+        for r in AVAILABLE_ROLES:
+            self.role_select.add_option(label=r, value=r, default=(r == self.selected_role))
+
+    def get_embed(self):
+        desc = "各役職の人数を設定してください。\n"
+        total = 0
+        for r, count in self.config.items():
+            if count > 0:
+                desc += f"**{r}**: {count}人\n"
+                total += count
+        
+        embed = discord.Embed(title="🎮 役職設定 (Role Config)", description=desc, color=discord.Color.blue())
+        embed.set_footer(text=f"現在の合計人数: {total}人 | 選択中: {self.selected_role}")
+        return embed
+
+    @discord.ui.select(placeholder="役職を選択...", min_values=1, max_values=1, options=[discord.SelectOption(label=r, value=r) for r in AVAILABLE_ROLES])
+    async def role_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.selected_role = select.values[0]
+        self.update_select_options()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label="-1", style=discord.ButtonStyle.danger)
+    async def decrement(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current = self.config.get(self.selected_role, 0)
+        if current > 0:
+            self.config[self.selected_role] = current - 1
+            if self.config[self.selected_role] == 0:
+                del self.config[self.selected_role]
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label="+1", style=discord.ButtonStyle.success)
+    async def increment(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.config[self.selected_role] = self.config.get(self.selected_role, 0) + 1
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label="決定 (Save)", style=discord.ButtonStyle.primary, row=2)
+    async def save_config(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Send to server
+        try:
+             async with httpx.AsyncClient() as client:
+                resp = await client.post(f"{POST_BASE}/v1/game/config", json={"roles": self.config}, timeout=5.0)
+                if resp.status_code == 200:
+                    await interaction.response.send_message(f"✅ 設定を保存しました！\n{self.config}", ephemeral=False)
+                else:
+                    await interaction.response.send_message(f"❌ エラー: {resp.text}", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 通信エラー: {e}", ephemeral=True)
+
+@bot.tree.command(name="config_ui", description="ボタンで役職を設定するUIを表示")
+async def config_ui(interaction: discord.Interaction):
+    """役職設定パネルを開く"""
+    view = RoleConfigView()
+    await interaction.response.send_message(embed=view.get_embed(), view=view, ephemeral=True)
+
+# Remove 'guild=' specific restriction to ensure it registers globally or to the sync target
+# Generally better to attach to tree and sync to guild in on_ready
+@bot.tree.command(name="link", description="DiscordアカウントとマイクラIDを紐付けます")
+@app_commands.describe(mc_name="あなたのマインクラフトのゲーマータグ")
+async def link_account(interaction: discord.Interaction, mc_name: str):
+    """マイクラIDと連携する"""
+    discord_id = str(interaction.user.id)
+    
+    # Update mapping
+    id_mapping[discord_id] = mc_name
+    save_id_mapping()
+    
+    await interaction.response.send_message(f"✅ 連携完了！\nDiscord: {interaction.user.mention}\nMinecraft: **{mc_name}**\n\nこれでVCとゲーム内の連携が有効になります。", ephemeral=True)
 
 class UnmuteView(discord.ui.View):
     def __init__(self):
@@ -210,6 +302,9 @@ class PcmSink(voice_recv.AudioSink):
         if not user or not data or data.pcm is None:
             return
         audio.feed(user.id, data.pcm)
+
+    def cleanup(self):
+        pass
 
 def _get_voice_client(guild: discord.Guild):
     vc = guild.voice_client
@@ -425,19 +520,20 @@ async def poll_server_for_speech():
 
 @bot.tree.command(name="join", description="あなたのいるVCに参加", guild=discord.Object(id=GUILD_ID) if GUILD_ID else None)
 async def join(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     if not interaction.user or not isinstance(interaction.user, discord.Member):
-        await interaction.response.send_message("Member情報が取れませんでした", ephemeral=True)
+        await interaction.followup.send("Member情報が取れませんでした", ephemeral=True)
         return
     if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("先にVCに入ってください", ephemeral=True)
+        await interaction.followup.send("先にVCに入ってください", ephemeral=True)
         return
 
     channel = interaction.user.voice.channel
     try:
         await channel.connect(cls=voice_recv.VoiceRecvClient)
-        await interaction.response.send_message(f"参加しました: {channel.name}", ephemeral=True)
+        await interaction.followup.send(f"参加しました: {channel.name}", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"参加失敗: {e}", ephemeral=True)
+        await interaction.followup.send(f"参加失敗: {e}", ephemeral=True)
 
 @bot.tree.command(name="leave", description="VCから退出", guild=discord.Object(id=GUILD_ID) if GUILD_ID else None)
 async def leave(interaction: discord.Interaction):

@@ -27,7 +27,10 @@ GameTest.register("ai_werewolf", "bot_test", (test) => {
     runLoop();
 
 })
-    .structureName("Component:gametest_platform"); // 既存の構造物または空の構造物を使用
+    .tag("suite:default");
+// .structureName("Component:gametest_platform"); // 構造物依存を削除し、デフォルト(空)を使用する試み
+// 注意: GameTestは通常構造物を要求しますが、最新のAPIでは省略やインライン定義が柔軟になっている場合があります。
+// エラーが出る場合は "minecraft:glass_pane" などを指定します。
 
 /**
  * ボットをスポーンさせるためのヘルパー関数

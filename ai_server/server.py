@@ -159,14 +159,122 @@ def get_latest_voxel():
     return data
     
 @app.post("/v1/mc/next_move")
-def get_next_move(player_name: str = "Bot"): # query param usually? or body. changing to just get/post
-    """クライアントが次の移動コマンドを問い合わせる用"""
+def get_next_move(player_name: str = "Bot"): 
+    """Botの次の動作を決定して返す (High-Frequency Polling)"""
     from parkour_brain import brain
     
-    # Get calculated action
-    action = brain.get_next_action()
-    
-    return action
+    if latest_voxel_snapshot:
+        brain.update_state(latest_voxel_snapshot)
+        
+        # --- Priority 1: Chase (Target Player) ---
+        target_rel = None
+        has_target = False
+        
+        from game_master import gm
+        
+        # Check active CHASE target
+        if brain.target_player:
+            target_p = next((p for p in gm.state.players if p.name == brain.target_player), None)
+            if target_p:
+                dist = _calc_dist(latest_voxel_snapshot["origin"], target_p.location)
+                if dist > 30: 
+                    print(f"Chase: Lost target (too far {dist:.1f})")
+                    brain.target_player = None
+                elif dist < 1.5:
+                    print(f"Chase: Caught up!")
+                    # Attack Logic could go here (send 'attack' command?)
+                else:
+                    target_rel = _calc_rel(latest_voxel_snapshot["origin"], target_p.location)
+                    has_target = True
+            else:
+                brain.target_player = None
+        
+        # --- Priority 2: Observe (Being Watched) ---
+        # If someone is looking at us, stare back and freeze (fear factor)
+        if not has_target:
+            my_pos = latest_voxel_snapshot["origin"]
+            
+            for p_name, p_state in gm.state.players.items():
+                if p_name == player_name: continue
+                if not p_state.is_alive: continue
+                # Skip spectators
+                if "spectator" in p_state.role or "ghost" in p_state.tags: continue
+
+                # Check if looking at me
+                # Vector from Them -> Me
+                dx = my_pos["x"] - p_state.location["x"]
+                dz = my_pos["z"] - p_state.location["z"]
+                dist = (dx**2 + dz**2)**0.5
+                
+                if dist < 20: # Only care if close enough
+                     # Normalize direction to me
+                     dir_to_me = {"x": dx/dist, "z": dz/dist}
+                     
+                     # Their view vector (from rotation y/yaw)
+                     # Yaw in MC: 0=South(+Z), 90=West(-X), 180=North(-Z), -90=East(+X)
+                     # Convert to Rad
+                     import math
+                     yaw_rad = (p_state.rotation["y"] + 90) * (math.pi / 180)
+                     # View Vector (2D XZ)
+                     view_x = math.cos(yaw_rad)
+                     view_z = math.sin(yaw_rad)
+                     
+                     # Dot Product
+                     dot = dir_to_me["x"] * view_x + dir_to_me["z"] * view_z
+                     
+                     # If dot > 0.9 (approx 25 deg cone), they are looking at us
+                     if dot > 0.9:
+                         # Reaction: Stare back (Turn to them)
+                         # Set target to them, but maybe DON'T move?
+                         # For now, let's just turn to face them.
+                         # ParkourBrain.get_next_action normally moves toward target.
+                         # We might need a special action "scan" or "idle_face".
+                         # For MVP: Just set them as target (Bot will walk to them slowly/creepy).
+                         # Or verify logic: if we set target, brain pathfinds.
+                         # Let's say "If watched, approach slowly" (Creepy).
+                         target_rel = _calc_rel(my_pos, p_state.location)
+                         has_target = True
+                         # print(f"Observe: {p_name} is watching! Staring back.")
+                         break
+
+        # --- Priority 3: Group Up (If no chase target) ---
+        if not has_target:
+            # Find nearest living player to stick with
+            nearest = None
+            min_d = 999
+            my_pos = latest_voxel_snapshot["origin"]
+            
+            for p_name, p_state in gm.state.players.items():
+                if p_name == player_name: continue
+                if not p_state.is_alive: continue
+                # Skip spectators/ghosts? 
+                if "spectator" in p_state.role or "ghost" in p_state.tags: continue # Simple check
+                
+                d = _calc_dist(my_pos, p_state.location)
+                if d < min_d:
+                    min_d = d
+                    nearest = p_state
+            
+            # Logic: If isolated (> 8 blocks), move closer. If too close (< 3), stop/back up.
+            if nearest and min_d > 5.0 and min_d < 50.0:
+                 # print(f"Group: Moving to {nearest.name} ({min_d:.1f}m)")
+                 target_rel = _calc_rel(my_pos, nearest.location)
+                 has_target = True
+        
+        # --- Priority 3: Wander (Handled by Brain fallback) ---
+        
+        cmd = brain.get_next_action(target_rel)
+        return cmd
+        
+    return {"type": "idle"}
+
+def _calc_dist(p1, p2):
+    return ((p1["x"]-p2["x"])**2 + (p1["z"]-p2["z"])**2)**0.5
+
+def _calc_rel(from_pos, to_pos):
+    return (int(to_pos["x"] - from_pos["x"]), 
+            int(to_pos["y"] - from_pos["y"]), 
+            int(to_pos["z"] - from_pos["z"]))
 
 # ゲーム状態とコマンドキュー
 game_state = {
@@ -176,23 +284,54 @@ game_state = {
 command_queue: List[Dict[str, Any]] = []
 discord_queue: List[Dict[str, Any]] = []
 
+# LLM Config (LM Studio / Ollama)
+LLM_API_BASE = os.getenv("LLM_API_BASE", "http://127.0.0.1:1234/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "local-model") # LM Studio often ignores model name or uses loaded model
+
 def call_llm(prompt: str) -> Optional[str]:
-    """Ollama (Local LLM) にリクエストを送る"""
+    """LM Studio (OpenAI Compatible) にリクエストを送る"""
     try:
-        data = {
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json"
-        }
-        response = requests.post(OLLAMA_URL, json=data)
-        if response.status_code == 200:
-            return json.loads(response.text)["response"]
+        # system prompt + user prompt
+        messages = [
+            {"role": "system", "content": "You are a helpful Minecraft AI assistant. Reply in JSON only."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        # print(f"DEBUG: Calling LLM at {LLM_API_BASE}...")
+        
+        # Synchronous implementation for simplicity in this thread, or use httpx inside async route
+        # Since this is called from async 'think_and_queue', we should ideally use async logic or run_in_executor.
+        # But 'think_and_queue' in this file (checked line 449) is async.
+        # Let's use httpx.post directly if we can, or requests.
+        # Just going with persistent client or simple one-off.
+        
+        import requests
+        resp = requests.post(
+            f"{LLM_API_BASE}/chat/completions",
+            json={
+                "model": LLM_MODEL,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 300
+            },
+            timeout=10 # Fast timeout
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            # Clean up potential markdown code blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            return content
         else:
-            print(f"LLM Error: {response.status_code}")
+            print(f"LLM Error: {resp.status_code} {resp.text}")
             return None
+            
     except Exception as e:
-        print(f"LLM Connection Error: {e}")
+        print(f"LLM Exception: {e}")
         return None
 
 
@@ -338,32 +477,67 @@ async def config_game(config: GameConfig):
     print(f"Game Config Updated: {config.roles}")
     return {"status": "updated", "config": config.roles}
 
+class AiModeConfig(BaseModel):
+    mode: str # 'player' or 'gm'
+
+@app.post("/v1/game/ai_mode")
+async def set_ai_mode(config: AiModeConfig):
+    game_state["ai_mode"] = config.mode
+    print(f"AI Mode switched to: {config.mode}")
+    return {"status": "updated", "mode": config.mode}
+
 async def think_and_queue():
     """AIに思考させ、結果をコマンドキュー(マイクラ&Discord)に追加する"""
     print("AI Thinking...")
     
-    prompt = f"""
-    あなたはMinecraftの人狼ゲームのプレイヤー(AIボット)です。
+    mode = game_state.get("ai_mode", "player") # 'player' or 'gm'
+
+    base_info = f"""
     現在の状況:
     - プレイヤー一覧: {json.dumps(game_state['players'])}
     - 直近のチャット: {json.dumps(game_state['chat_history'][-5:])}
-    
-    タグの見方:
-    - pub: 公開情報 (全員が見える状態)
-    - sec: 秘匿情報 (役職など、あなただけが知っている情報)
-    
-    あなたは「村人」として振る舞ってください。
-    怪しいプレイヤーがいれば攻撃し、チャットで会話してください。
-    
-    次のJSONフォーマットで行動を決定してください:
-    {{
-        "action": "move" | "attack" | "chat" | "idle",
-        "target": "プレイヤー名 (attack/moveの場合)",
-        "message": "チャット内容 (chatの場合)",
-        "reason": "行動の理由"
-    }}
-    必ずJSONのみを出力してください。
     """
+
+    if mode == "gm":
+        prompt = f"""
+        あなたはMinecraft人狼ゲームの「ゲームマスター(GM)」兼「実況者」です。
+        {base_info}
+        
+        役割:
+        - ゲームの進行状況を把握し、盛り上げる実況を行ってください。
+        - ルールの説明や、怪しい行動へのツッコミを入れてください。
+        - プレイヤーとしては行動しません (move/attackは基本 idle)。
+        
+        次のJSONフォーマットで行動を決定してください:
+        {{
+            "action": "chat" | "idle",
+            "message": "実況コメント",
+            "reason": "コメントの理由"
+        }}
+        """
+    else:
+        # Player Mode (Default)
+        prompt = f"""
+        あなたはMinecraftの人狼ゲームのプレイヤー(AIボット)です。
+        {base_info}
+        
+        タグの見方:
+        - pub: 公開情報 (全員が見える状態)
+        - sec: 秘匿情報 (役職など、あなただけが知っている情報)
+        
+        あなたは「村人」として振る舞ってください。
+        怪しいプレイヤーがいれば攻撃し、チャットで会話してください。
+        
+        次のJSONフォーマットで行動を決定してください:
+        {{
+            "action": "move" | "attack" | "chat" | "idle",
+            "target": "プレイヤー名 (attack/moveの場合)",
+            "message": "チャット内容 (chatの場合)",
+            "reason": "行動の理由"
+        }}
+        """
+        
+    prompt += "\n必ずJSONのみを出力してください。"
     
     llm_response = call_llm(prompt)
     if llm_response:
@@ -385,5 +559,5 @@ async def think_and_queue():
             print("JSON Parse Error")
 
 if __name__ == "__main__":
-    print(f"Starting FastAPI Server on port 8080 (Model: {MODEL_NAME})...")
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    print(f"Starting FastAPI Server on port 8082 (Model: {MODEL_NAME})...")
+    uvicorn.run(app, host="0.0.0.0", port=8082)
