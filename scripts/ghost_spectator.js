@@ -31,7 +31,7 @@ async function toAction(p) {
 }
 
 async function callUnmute(p) {
-    const req = new HttpRequest("http://127.0.0.1:8080/v1/discord/unmute")
+    const req = new HttpRequest("http://127.0.0.1:8082/v1/discord/unmute")
     req.method = HttpRequestMethod.Post
     req.headers = [new HttpHeader("Content-Type", "application/json")]
     req.body = JSON.stringify({ mcName: p.name })

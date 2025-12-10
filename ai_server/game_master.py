@@ -75,9 +75,9 @@ class GameMaster:
         self._setup_siblings()
 
     def _get_team_for_role(self, role: str) -> str:
-        if role in ["werewolf", "madman", "fanatic", "potion_wolf", "attention_seeker", "murderer", "nekomata"]:
+        if role in ["werewolf", "madman", "fanatic", "potion_wolf", "attention_seeker", "murderer", "nekomata", "accomplice"]:
             return "werewolf"
-        if role in ["vampire"]:
+        if role in ["vampire", "immoral"]:
             return "third"
         return "villager"
 

@@ -6,7 +6,7 @@ import "./camera_director.js"; // 自動撮影カメラマン
 import "./ghost_spectator.js"; // ハイブリッド観戦モード
 
 // ===== Voxel Sensor config =====
-const VOXEL_ENDPOINT = "http://127.0.0.1:8080/v1/mc/state"; // Port 8080 as per server.py
+const VOXEL_ENDPOINT = "http://127.0.0.1:8082/v1/mc/state"; // Port 8082 as per server.py
 const VOXEL_RADIUS = 16;       // XZ 平面の半径
 const VOXEL_HALF_HEIGHT = 4;   // 上下の高さ
 const VOXEL_INTERVAL_TICKS = 4; // 何tickごとに送るか（4 = 0.2秒ごと）
@@ -149,7 +149,7 @@ system.runInterval(() => {
 }, 1);
 
 function pollNextMove(player) {
-    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/next_move");
+    const req = new HttpRequest("http://127.0.0.1:8082/v1/mc/next_move");
     req.method = HttpRequestMethod.Post;
     req.headers = [["Content-Type", "application/json"]];
     req.body = JSON.stringify({});
@@ -165,7 +165,7 @@ function pollNextMove(player) {
 }
 
 function pollGlobalCommands() {
-    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/commands");
+    const req = new HttpRequest("http://127.0.0.1:8082/v1/mc/commands");
     req.method = HttpRequestMethod.Get; // GET
 
     http.request(req).then(resp => {
@@ -205,8 +205,19 @@ function executeBotAction(player, cmd) {
             player.jump();
             player.setSprinting(true);
         } else if (cmd.method === "walk") {
+        } else if (cmd.method === "walk") {
             player.setSprinting(false);
         }
+    }
+    else if (cmd.type === "look_at") {
+        // Look at relative position
+        const currentPos = player.location;
+        const targetWorldPos = {
+            x: currentPos.x + cmd.target.x,
+            y: currentPos.y + cmd.target.y, // Usually eye level
+            z: currentPos.z + cmd.target.z
+        };
+        player.lookAtLocation(targetWorldPos);
     }
 }
 
@@ -262,6 +273,27 @@ world.beforeEvents.chatSend.subscribe((event) => {
         event.cancel = true;
         stopCamera(player.name);
     }
+    // !spawn_ai コマンド
+    else if (msg === "!spawn_ai") {
+        event.cancel = true; // チャットには流さない
+        system.run(() => {
+            try {
+                // プレイヤーの位置でGameTestを実行
+                player.runCommandAsync("gametest run ai_werewolf:bot_test");
+                player.sendMessage("§aBot(GameTest)のスポーンを試みました。周囲に十分なスペース(3x3x3)があるか確認してください。");
+            } catch (e) {
+                player.sendMessage(`§cエラー: ${e}`);
+            }
+        });
+    }
+    // !call / !come (Botを呼び寄せる)
+    else if (msg === "!call" || msg === "!come") {
+        event.cancel = true;
+        system.run(() => {
+            player.runCommandAsync(`tp @a[tag=${AI_TAG}] @s`);
+            player.sendMessage("§eAIをあなたの位置にTPさせました。");
+        });
+    }
 });
 
 // (Existing itemUse listener)
@@ -305,7 +337,7 @@ world.afterEvents.entityHit.subscribe((event) => {
 });
 
 function sendEventToServer(eventData) {
-    const req = new HttpRequest("http://127.0.0.1:8080/v1/mc/events");
+    const req = new HttpRequest("http://127.0.0.1:8082/v1/mc/events");
     req.method = HttpRequestMethod.Post;
     req.headers = [["Content-Type", "application/json"]];
     req.body = JSON.stringify(eventData);
