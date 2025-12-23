@@ -78,5 +78,15 @@ class TestGameMaster(unittest.TestCase):
         self.assertTrue(found_give)
         print("Seer Ability Item given at 4 Quartz.")
 
+    def test_event_without_player_is_ignored(self):
+        print("\n[Test] Missing Player Handling")
+        # Ensure no exception and no mutation when player field is absent
+        cmds = self.gm.process_event({"type": "death"})
+
+        self.assertEqual(cmds, [])
+        # Player list remains unchanged
+        self.assertSetEqual(set(self.gm.state.players.keys()), {"Steve", "Alex", "Bob"})
+        print("Gracefully ignored event without player name.")
+
 if __name__ == '__main__':
     unittest.main()
