@@ -2,15 +2,15 @@ import json
 import random
 import time
 from typing import Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class PlayerState(BaseModel):
     name: str
     role: str = "villager"
     team: str = "villager"  # villager, werewolf, third
     is_alive: bool = True
-    items: List[str] = []
-    status_effects: List[str] = []
+    items: List[str] = Field(default_factory=list)
+    status_effects: List[str] = Field(default_factory=list)
     quartz_count: int = 0
     
     # Specific Role States
@@ -20,7 +20,7 @@ class PlayerState(BaseModel):
     
 class GameState(BaseModel):
     phase: str = "waiting" # waiting, day, night, end
-    players: Dict[str, PlayerState] = {}
+    players: Dict[str, PlayerState] = Field(default_factory=dict)
     game_timer: int = 0
     winner: Optional[str] = None
 
@@ -105,7 +105,10 @@ class GameMaster:
         event_type = event.get("type")
         player_name = event.get("player")
         commands = []
-        
+
+        if player_name is None:
+            return commands
+
         if player_name not in self.state.players:
             self.add_player(player_name) # Auto-add for safety
 
