@@ -175,7 +175,6 @@
         <p>Instances: <span id="count">0</span> | Players: <span id="pcount">0</span></p>
         <p><button id="btnFollow" class="active">Auto Follow: POS ONLY</button></p>
         <p><button id="btnFocusMap">Focus Map Center</button></p>
-        <p><button id="btnConsole" style="background:#4400aa;">💻 TERMINAL (CMD)</button></p>
 
         <div id="selected-info">
             <div>Selected: <span id="sel-name">-</span></div>
@@ -189,15 +188,7 @@
         <p class="help" id="eco-msg" style="color:#888; display:none;">💤 ECO MODE (1fps)</p>
     </div>
 
-    <div id="console-panel">
-        <div id="console-output">
-            <div>AI Server Console v1.0 connected...</div>
-        </div>
-        <div id="console-input-bar">
-            <input type="text" id="console-input" placeholder="Type /command or say something...">
-            <button id="console-send">SEND</button>
-        </div>
-    </div>
+    <!-- Console UI Removed -->
 
     <script type="module">
         import * as THREE from 'three';
@@ -239,20 +230,7 @@
         const overlay = document.getElementById('overlay');
         const btnFollow = document.getElementById('btnFollow');
         const btnFocusMap = document.getElementById('btnFocusMap');
-        const btnConsole = document.getElementById('btnConsole');
-        const selInfo = document.getElementById('selected-info');
-        const selName = document.getElementById('sel-name');
-        const selPos = document.getElementById('sel-pos');
-        const statusIcon = document.getElementById('status-icon');
         const ecoMsg = document.getElementById('eco-msg');
-
-        // Console UI
-        const consolePanel = document.getElementById('console-panel');
-        const consoleOut = document.getElementById('console-output');
-        const consoleIn = document.getElementById('console-input');
-        const consoleSend = document.getElementById('console-send');
-        let isConsoleOpen = false;
-        let logCursor = -1;
 
         function wakeUp() { lastActionTime = Date.now(); }
 
@@ -267,12 +245,7 @@
             await fetchMap();
             setTimeout(mapLoop, REFRESH_RATE);
         }
-        async function logLoop() {
-            await fetchLogs();
-            setTimeout(logLoop, 1000);
-        }
         mapLoop();
-        logLoop();
 
 
         // --- Events (Wake Up) ---
@@ -308,32 +281,7 @@
             e.stopPropagation();
         });
 
-        btnConsole.addEventListener('click', (e) => {
-            wakeUp();
-            isConsoleOpen = !isConsoleOpen;
-            consolePanel.style.display = isConsoleOpen ? 'flex' : 'none';
-            if (isConsoleOpen) consoleIn.focus();
-            e.stopPropagation();
-        });
 
-        // Console Send
-        async function sendCommand() {
-            wakeUp();
-            const txt = consoleIn.value.trim();
-            if (!txt) return;
-            consoleIn.value = "";
-            try {
-                await fetch('/v1/mc/command_request', {
-                    method: 'POST', body: JSON.stringify({ type: "console", player: "WebUser", target: txt }),
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const div = document.createElement('div');
-                div.innerText = "> " + txt; div.style.color = "#aaa";
-                consoleOut.appendChild(div); consoleOut.scrollTop = consoleOut.scrollHeight;
-            } catch (e) { console.error(e); }
-        }
-        consoleSend.addEventListener('click', sendCommand);
-        consoleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendCommand(); e.stopPropagation(); });
 
         overlay.addEventListener('click', () => {
             overlay.style.display = 'none'; // Force hide immediately
@@ -358,7 +306,6 @@
         });
 
         function processKey(e, isDown) {
-            if (document.activeElement === consoleIn) return;
             keyState[e.code] = isDown;
             if (isDown && e.key === 'Alt') { document.exitPointerLock(); e.preventDefault(); }
             wakeUp();
@@ -366,7 +313,6 @@
 
         function processClick(e) {
             if (e.button !== 0) return;
-            if (isConsoleOpen && (e.target.closest('#console-panel') || e.target === btnConsole)) return;
             if (isLocked) raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
             else {
                 mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -518,24 +464,7 @@
                 }
             } catch (e) { }
         }
-        async function fetchLogs() {
-            if (!isConsoleOpen) return;
-            try {
-                const res = await fetch(`/v1/system/logs?since=${logCursor}`);
-                const data = await res.json();
-                if (data.logs && data.logs.length > 0) {
-                    for (const l of data.logs) {
-                        const div = document.createElement('div');
-                        const ts = document.createElement('span'); ts.className = "log-ts"; ts.innerText = `[${l.ts}]`;
-                        div.appendChild(ts); div.appendChild(document.createTextNode(l.msg));
-                        consoleOut.appendChild(div);
-                    }
-                    consoleOut.scrollTop = consoleOut.scrollHeight;
-                    logCursor = data.cursor;
-                    wakeUp();
-                } else if (data.cursor > logCursor) { logCursor = data.cursor; }
-            } catch (e) { }
-        }
+
 
 
         function updatePlayers(pDict) {

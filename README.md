@@ -242,3 +242,16 @@ Windowsセキュリティの仕様上、自分のPCで建てたサーバーに�
 5.  友達はそのフレンドに参加するだけで、あなたのサーバーへ転送されます。
 
 ※ 友達にスマホアプリ `BedrockTogether` を使ってもらう方法もあります（ホスト側の準備不要）。
+
+## Terrain Scanner & Web 3D System
+
+This update introduces a **Real-time Terrain Scanner** and **Web-based 3D Viewer**.
+
+### Features
+- **Auto-Scan**: Scans 5x5 blocks around players automatically.
+- **Web 3D View**: Visualizes the world in real-time at http://localhost:8082.
+- **Persistence**: Map data is saved to map_data.json and survives restarts.
+
+### How to Run
+1. **Launch Server**: Run LAUNCH_JINRO_ONLY.bat.
+2. **View Map**: Open browser to http://localhost:8082 (or your Ngrok URL).

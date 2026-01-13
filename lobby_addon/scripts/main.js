@@ -1,49 +1,46 @@
 import { world, system } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
 
-// ==========================================
-// V60: RESTORED & SAFE (No Forced Gamemode)
-// ==========================================
-console.warn("[System] AI Addon v60 (Standard) STARTING...");
+const JINRO_IP = "127.0.0.1";
+const JINRO_PORT = "19134";
+const LOBBY_IP = "127.0.0.1";
+const LOBBY_PORT = "19133";
 
-const SERVER_CONFIG = {
-    "Jinro": { ip: "127.0.0.1", port: 19134 },
-    "Lobby": { ip: "127.0.0.1", port: 19133 }
-};
+function showServerMenu(player) {
+    const form = new ActionFormData()
+        .title("Server Transfer")
+        .body("Choose a destination")
+        .button("Jinro Server")
+        .button("Lobby");
 
-// Item Use Listener (Compass)
-world.beforeEvents.itemUse.subscribe((ev) => {
-    if (ev.itemStack.typeId === "minecraft:compass") {
+    form.show(player).then((response) => {
+        if (response.canceled) return;
+
+        if (response.selection === 0) {
+            player.sendMessage("[System] Transferring to Jinro...");
+            player.runCommandAsync(`transferserver ${JINRO_IP} ${JINRO_PORT}`);
+        } else if (response.selection === 1) {
+            player.sendMessage("[System] Transferring to Lobby...");
+            player.runCommandAsync(`transferserver ${LOBBY_IP} ${LOBBY_PORT}`);
+        }
+    }).catch(() => {});
+}
+
+world.afterEvents.itemUse.subscribe((ev) => {
+    if (ev.itemStack && ev.itemStack.typeId === "minecraft:compass") {
         system.run(() => {
             showServerMenu(ev.source);
         });
     }
 });
 
-function showServerMenu(player) {
-    const form = new ActionFormData()
-        .title("§lサーバー移動")
-        .body("移動先を選択してください")
-        .button("🐺 人狼サーバー (Jinro)", "textures/items/iron_sword")
-        .button("🏰 ロビー (Lobby)", "textures/items/bed");
-
-    form.show(player).then((response) => {
-        if (response.canceled) return;
-
-        if (response.selection === 0) {
-            transfer(player, "Jinro");
-        } else if (response.selection === 1) {
-            transfer(player, "Lobby");
+world.afterEvents.playerSpawn.subscribe((ev) => {
+    const player = ev.player;
+    try {
+        if (!player.hasTag("compass_init")) {
+            player.addTag("compass_init");
+            player.runCommandAsync("give @s compass 1");
+            player.sendMessage("[System] Compass given.");
         }
-    });
-}
-
-function transfer(player, targetName) {
-    const config = SERVER_CONFIG[targetName];
-    if (!config) return;
-
-    player.sendMessage(`§eNow connecting to ${targetName}...`);
-    // Use standard command for transfer
-    player.runCommandAsync(`transferserver ${config.ip} ${config.port}`);
-}
-
+    } catch {}
+});
