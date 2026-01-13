@@ -3,28 +3,47 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 echo ========================================================
-echo       ALL SYSTEMS LAUNCHER
+echo       MINECRAFT SERVER NETWORK LAUNCHER
 echo ========================================================
 
-:: 0. Clean up old processes SCIPPED
-:: (User request: Do not kill other Python bots)
+:: 1. Launch WaterdogPE Proxy (Port 19132)
+echo [1/5] Starting WaterdogPE (Frontend)...
+cd waterdog
+start "Waterdog Proxy" java -Xms512M -Xmx1G -jar Waterdog.jar
+cd ..
 
-:: 1. Launch Minecraft Server (BDS)
-echo [1/3] Starting Minecraft Server...
-:: Change this path if your server is elsewhere
-set "BDS_DIR=C:\Users\YoneRai12\Desktop\bedrock-server-1.21.124.2"
-start "Minecraft Server" /D "%BDS_DIR%" bedrock_server.exe
+:: 2. Launch Lobby Server (Port 19133)
+echo [2/5] Starting Lobby Server...
+set "LOBBY_DIR=..\bedrock-server-lobby"
+if exist "%LOBBY_DIR%" (
+    start "Lobby Server" /D "%LOBBY_DIR%" bedrock_server.exe
+) else (
+    echo [SKIP] Lobby server not found.
+)
 
-:: 2. Launch AI Server
-echo [2/3] Starting AI Brain...
-:: We run inside ai_server folder so it finds its files
-start "AI Brain" /D "ai_server" ..\.venv\Scripts\python.exe server.py
+:: 3. Launch Jinro Server (Port 19134)
+echo [3/5] Starting Jinro Server...
+set "JINRO_DIR=..\bedrock-server-1.21.130.4"
+start "Jinro Server" /D "%JINRO_DIR%" bedrock_server.exe
 
-:: 3. Launch Discord Bot
-echo [3/3] Starting Discord Bot...
-start "Discord Bot" /D "ai_server" ..\.venv\Scripts\python.exe bot.py
+:: 4. Launch AI Brain (Enabled)
+echo [4/5] Starting AI Brain (Python API)...
+start "AI Brain" /min python ai_server/server.py
+
+:: 5. Launch Console Proxy (Switch/PS5 Support)
+echo [5/5] Starting Console Proxy...
+start "Console Proxy" cmd /c run_proxy.bat
+
+:: 6. Auto-OP Injection (Waits for Jinro Window)
+echo [6/7] Injecting Admin Permissions...
+start /min powershell -ExecutionPolicy Bypass -File scripts\auto_op.ps1
+
+:: 7. Launch Ngrok Debug Tunnel
+echo [7/7] Starting Ngrok Tunnel (Port 8082)...
+call launch_ngrok.bat
 
 echo.
-echo All launched! You can close this window.
-echo (Wait 5 seconds...)
+echo All High-Tech Servers Launched!
+echo.
+echo ========================================================
 timeout /t 5
