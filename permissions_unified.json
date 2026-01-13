@@ -1,0 +1,16 @@
+{
+    "allowed_modules": [
+        "@minecraft/server",
+        "@minecraft/server-ui",
+        "@minecraft/server-gametest",
+        "@minecraft/server-net",
+        "@minecraft/server-admin",
+        "@minecraft/server-editor"
+    ],
+    "permissions": [
+        {
+            "permission": "operator",
+            "xuid": "REPLACE_WITH_YOUR_XUID"
+        }
+    ]
+}

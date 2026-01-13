@@ -1,13 +1,13 @@
 {
     "format_version": 2,
     "header": {
-        "name": "Lobby System",
-        "description": "Stable v60.1 (1.11.0)",
+        "name": "Terrain Scanner",
+        "description": "Scanner Mode v61.4 (Universal Fix)",
         "uuid": "455049b5-043f-40aa-8bcb-369bc7abea9e",
         "version": [
             1,
             14,
-            0
+            5
         ],
         "min_engine_version": [
             1,
@@ -28,14 +28,17 @@
             ]
         }
     ],
+    "capabilities": [
+        "script_eval"
+    ],
     "dependencies": [
         {
             "module_name": "@minecraft/server",
-            "version": "1.11.0"
+            "version": "1.14.0"
         },
         {
-            "module_name": "@minecraft/server-ui",
-            "version": "1.2.0"
+            "module_name": "@minecraft/server-net",
+            "version": "1.0.0-beta"
         }
     ]
 }
