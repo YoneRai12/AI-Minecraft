@@ -255,3 +255,9 @@ This update introduces a **Real-time Terrain Scanner** and **Web-based 3D Viewer
 ### How to Run
 1. **Launch Server**: Run LAUNCH_JINRO_ONLY.bat.
 2. **View Map**: Open browser to http://localhost:8082 (or your Ngrok URL).
+
+## Current Development Challenges (What we are struggling with)
+
+- **Process Management**: Currently requires running LAUNCH_JINRO_ONLY.bat and python server_backend.py separately. System integration is manual.
+- **Zombie Processes**: edrock_server.exe sometimes remains in the background after closing, causing 'Server Full' errors. Requires manual cleanup via Task Manager or 	askkill.
+- **Version Compatibility**: Strict dependency matching (@minecraft/server 1.14.0) is required. Preview versions (2.x.x) cause silent failures on Stable BDS.
