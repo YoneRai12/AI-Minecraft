@@ -1,0 +1,33 @@
+[OCR Result from Screen]
+The command block output lists specific exclusion tags used to assign new roles. The visible roles (tags) are:
+
+主要役職:
+- 人狼 (Werewolf)
+- 狂人 (Madman)
+- 預言者 (Seer)
+- 霊媒師 (Medium)
+- 狼憑き (Wolf Possessed)
+
+特殊役職:
+- コスプレイヤー (Cosplayer)
+- 兄 (Brother)
+- 弟 (Younger Brother)
+- 従者 (Servant)
+- ポーション狼 (Potion Wolf)
+- 狂信者 (Fanatic)
+- 陰キャ (Gloomy)
+- イタコ (Itako)
+- カウンセラー (Counselor)
+- 呪い人 (Cursed)
+- かまってちゃん (Attention Seeker)
+- トラブルメーカー (Troublemaker)
+- 猫又 (Nekomata)
+- 人狼にさせる者 (Werewolf Maker)
+- ポンコツ預言 (Clumsy Seer)
+- 完全な村人 (Perfect Villager)
+- 殺人鬼 (Murderer)
+- パン屋 (Baker)
+- 爆破者 (Bomber)
+- 骨消し (Bone Eraser)
+
+Note: "bbb" and "放置" (AFK) are also used as control tags.

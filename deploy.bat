@@ -14,7 +14,7 @@ set "CLIENT_MOD_SOURCE=C:\Users\YoneRai12\AppData\Roaming\Minecraft Bedrock\user
 set "CLIENT_RP_SOURCE=C:\Users\YoneRai12\AppData\Roaming\Minecraft Bedrock\users\shared\games\com.mojang\resource_packs"
 
 :: 3. コピー先のBDSサーバーフォルダ
-set "BDS_PATH=C:\Users\YoneRai12\Desktop\bedrock-server-1.21.124.2"
+set "BDS_PATH=C:\Users\YoneRai12\Desktop\bedrock-server-1.21.130.4"
 
 :: 4. サーバーのワールドフォルダ名 (server.propertiesで設定した名前、デフォルトは "Bedrock level")
 set "SERVER_WORLD_NAME=Bedrock level"
@@ -31,8 +31,10 @@ echo.
 :: --- 1. MOD & リソースパックの全体同期 ---
 echo [1/3] Syncing All Client Mods/RPs...
 :: まずクライアントの全MODをサーバーに同期 (土台)
-robocopy "%CLIENT_MOD_SOURCE%" "%BDS_PATH%\behavior_packs" /MIR /XD "maikurakomando" 2>nul
-robocopy "%CLIENT_RP_SOURCE%" "%BDS_PATH%\resource_packs" /MIR 2>nul
+:: /E: サブフォルダもコピー (空ならコピーしない) /XO: 新しい方を除外しない (上書き)
+:: 注意: /MIRを使うとサーバー標準のバニラパックが消えるため廃止
+robocopy "%CLIENT_MOD_SOURCE%" "%BDS_PATH%\behavior_packs" /E /XO /XD "maikurakomando" 2>nul
+robocopy "%CLIENT_RP_SOURCE%" "%BDS_PATH%\resource_packs" /E /XO 2>nul
 echo Client Mods synced.
 
 :: --- 2. 開発中アドオン (maikurakomando) の上書き更新 ---

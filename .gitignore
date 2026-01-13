@@ -1,14 +1,22 @@
-# User Secrets
-.env
-ai_server/.env
+# Server Binaries & Data
+bedrock-server-*/
+waterdog/
+waterdog.zip
 
-# Python
+# Secrets & Authentication
+cache/
+*.json.token
+*.token
+
+# User Specific / Environment
+.venv/
 __pycache__/
-*.pyc
-
-# System
-.DS_Store
-Thumbs.db
-
-# Logs
 *.log
+
+# Backups
+behavior_packs_OLD/
+*.mcworld
+*_backup/
+
+# Individual Files (if sensitive)
+# force_write_config.py # Contains username in path, but logic is useful. User decides.

@@ -194,4 +194,107 @@ class ParkourBrain:
             "method": move_type # walk, jump, etc.
         }
 
+    # --- Helper Methods ---
+    def _is_solid(self, x, y, z):
+        # Convert relative (x,y,z) to grid index
+        # Grid index: 
+        # x_idx = x + rad
+        # z_idx = z + rad
+        # y_idx = y + half_height
+        
+        xi = x + self.radius
+        zi = z + self.radius
+        yi = y + self.half_height
+        
+        if 0 <= xi < self.width and 0 <= zi < self.width and 0 <= yi < self.height:
+            return self.voxel_grid[yi, zi, xi] == 1 # 1 is solid
+        return False
+
+    def _is_standable(self, x, y, z):
+        # Feet at (x,y,z) requires:
+        # 1. Block below (y-1) is solid
+        # 2. Block at feet (y) is NOT solid
+        # 3. Block at head (y+1) is NOT solid
+        return (self._is_solid(x, y-1, z) and 
+                not self._is_solid(x, y, z) and 
+                not self._is_solid(x, y+1, z))
+
+    def calculate_path(self, target):
+        """A* Search from (0,0,0) to target (x,y,z)"""
+        start = (0, 0, 0)
+        goal = target
+        
+        # Priority Queue: (f_score, h_score, current_node_tuple, path_list)
+        # We store path_list to reconstruct easily, or use came_from map
+        queue = []
+        heapq.heappush(queue, (0, 0, start, []))
+        
+        visited = set()
+        visited.add(start)
+        
+        attempts = 0
+        max_attempts = 1000 # Safety break
+        
+        best_path = []
+        closest_dist = 999
+        
+        while queue and attempts < max_attempts:
+            attempts += 1
+            f, h, current, path = heapq.heappop(queue)
+            
+            # Distance to goal check
+            dist = math.sqrt((current[0]-goal[0])**2 + (current[1]-goal[1])**2 + (current[2]-goal[2])**2)
+            if dist < 1.0:
+                return path # Found!
+            
+            if dist < closest_dist:
+                closest_dist = dist
+                best_path = path
+
+            # Explore neighbors
+            neighbors = self._get_neighbors(current)
+            for next_node, move_type, cost in neighbors:
+                if next_node in visited:
+                    continue
+                
+                visited.add(next_node)
+                
+                # Heuristic
+                new_g = len(path) + cost
+                new_h = math.sqrt((next_node[0]-goal[0])**2 + (next_node[1]-goal[1])**2 + (next_node[2]-goal[2])**2)
+                new_f = new_g + new_h
+                
+                new_path = path + [{"node": next_node, "type": move_type}]
+                heapq.heappush(queue, (new_f, new_h, next_node, new_path))
+                
+        # If no full path found, return path to closest point
+        return best_path
+
+    def _get_neighbors(self, pos):
+        """Return list of (next_pos, move_type, cost)"""
+        x, y, z = pos
+        moves = []
+        
+        # 1. Walk (NSWE)
+        for dx, dz in [(0,1), (0,-1), (1,0), (-1,0)]:
+            nx, nz = x+dx, z+dz
+            ny = y
+            # Check walk on flat
+            if self._is_standable(nx, ny, nz):
+                moves.append(((nx, ny, nz), "walk", 1.0))
+            # Check walk UP (Auto-jump)
+            elif self._is_standable(nx, ny+1, nz) and not self._is_solid(x, y+2, z): # Head clearance for jump
+                moves.append(((nx, ny+1, nz), "jump_up", 1.5))
+            # Check walk DOWN (Drop)
+            elif self._is_standable(nx, ny-1, nz):
+                moves.append(((nx, ny-1, nz), "walk", 1.2))
+            elif self._is_standable(nx, ny-2, nz): # Drop 2 blocks
+                moves.append(((nx, ny-2, nz), "walk", 1.5))
+                
+        # 2. Long Jump (Sprint Jump) - 2 blocks forward, 1 block gap?
+        # Simplified: Check 2 blocks ahead
+        # This is expensive, add if needed.
+        
+        return moves
+
 brain = ParkourBrain()

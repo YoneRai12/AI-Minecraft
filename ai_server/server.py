@@ -41,6 +41,39 @@ class DiscordReportData(BaseModel):
     t0: float
     t1: float
 
+# --- Log Capture Setup ---
+import builtins
+import collections
+import time
+
+LOG_BUFFER = collections.deque(maxlen=1000)
+log_cursor_counter = 0
+
+original_print = builtins.print
+
+def custom_print(*args, **kwargs):
+    global log_cursor_counter
+    # Original print
+    original_print(*args, **kwargs)
+    # buffer
+    msg = " ".join(map(str, args))
+    timestamp = time.strftime("%H:%M:%S")
+    LOG_BUFFER.append({"id": log_cursor_counter, "ts": timestamp, "msg": msg})
+    log_cursor_counter += 1
+
+builtins.print = custom_print
+
+@app.get("/v1/system/logs")
+def get_logs(since: int = -1):
+    """Fetch logs since a cursor ID"""
+    if since < 0:
+        # Return last 50
+        return {"logs": list(LOG_BUFFER)[-50:], "cursor": log_cursor_counter}
+    
+    # Filter
+    new_logs = [l for l in LOG_BUFFER if l["id"] > since]
+    return {"logs": new_logs, "cursor": log_cursor_counter}
+
 # --- Voxel Sensor Models ---
 class PlayerInfo(BaseModel):
     name: str
@@ -57,32 +90,128 @@ class VoxelSnapshot(BaseModel):
     height: int
     grid: List[int]
 
+# --- Permanent Memory ---
+WORLD_MAP_FILE = "world_map.json"
+world_map = {} # Key: "x,y,z", Value: BlockID (int)
+
+def load_world_map():
+    global world_map
+    if os.path.exists(WORLD_MAP_FILE):
+        try:
+            with open(WORLD_MAP_FILE, 'r') as f:
+                world_map = json.load(f)
+            print(f"[Memory] Loaded {len(world_map)} voxels from {WORLD_MAP_FILE}")
+        except Exception as e:
+            print(f"[Memory] Failed to load map: {e}")
+
+def save_world_map():
+    global world_map
+    try:
+        with open(WORLD_MAP_FILE, 'w') as f:
+            json.dump(world_map, f)
+        print(f"[Memory] Saved {len(world_map)} voxels to {WORLD_MAP_FILE}")
+    except Exception as e:
+        print(f"[Memory] Failed to save map: {e}")
+
+# Load on startup
+load_world_map()
+
+# --- Realtime Player Tracking ---
+player_positions = {}
+
+@app.post("/v1/mc/player")
+def update_player(info: PlayerInfo):
+    """Update player position (High frequency)"""
+    player_positions[info.name] = info.dict()
+    return {"status": "ok"}
+
+# Global Version
+map_version = 0
+
 @app.post("/v1/mc/state")
 def receive_state(snapshot: VoxelSnapshot):
-    """マイクラからの視界データ(Voxel)を受け取る"""
-    global latest_voxel_snapshot
+    """マイクラからの視界データ(Voxel)を受け取る & 長期記憶にマージ"""
+    global latest_voxel_snapshot, world_map, map_version
     
-    # Update global state for visualizer
-    latest_voxel_snapshot = snapshot.dict()
-    # Add path if available from brain (Mock for now or extract)
-    # If we want to show the path *AI planned*, we should grab it from Brain.
-    from parkour_brain import brain
-    # Ideally brain updates its internal state when we call update_state below.
-    # But path is calculated on 'get_next_action' or we can store last path.
-    
-    # Save to file for debug/visualization (Legacy)
-    with open("latest_voxel.json", "w") as f:
-        f.write(snapshot.json())
+    # Update Player Pos from snapshot as well
+    player_positions[snapshot.player.name] = snapshot.player.dict()
 
-    # --- Parkour Logic (Simplified for now) ---
-    from parkour_brain import brain
+    # 1. Provide immediate feedback / update visualizer
+    latest_voxel_snapshot = snapshot.dict()
     
-    # 1. Update Brain
+    # 2. Merge into Permanent Memory
+    origin = snapshot.origin
+    ox, oy, oz = origin['x'], origin['y'], origin['z']
+    r = snapshot.radius
+    h = snapshot.halfHeight
+    
+    # Grid Order from client: Y -> Z -> X
+    w = r * 2 + 1  # Width (X)
+    d = r * 2 + 1  # Depth (Z)
+    
+    idx = 0
+    updates = 0
+    # Client sends flat array: grid[y][z][x] flattened
+    for ly in range(-h, h + 1): # Local Y
+        world_y = oy + ly
+        for lz in range(-r, r + 1): # Local Z
+            world_z = oz + lz
+            for lx in range(-r, r + 1): # Local X
+                world_x = ox + lx
+                
+                if idx < len(snapshot.grid):
+                    val = snapshot.grid[idx]
+                    if val != 0: # Only store non-air
+                        key = f"{world_x},{world_y},{world_z}"
+                        if key not in world_map or world_map[key] != val:
+                            world_map[key] = val
+                            updates += 1
+                    else:
+                        # If it's air now, remove it? 
+                        # Or just ignore to prevent "erasing" walls behind other walls?
+                        # No, !scan is a raycast? No, it's a "getBlock".
+                        # So it sees through walls. Explicit 0 means AIR.
+                        # So we SHOULD record Air to handle "broken blocks".
+                        # But map size will explode if we store all air.
+                        # Strategy: Only store Solids (1). If we need to dig, we assume unknown is air?
+                        # Or maybe we DO store air if it was previously solid?
+                        # For now: Only Store Solids to keep file size small.
+                        pass
+                    
+                    idx += 1
+
+    if updates > 0:
+        map_version += 1
+        print(f"[Memory] Merged scan (v{map_version})! +{updates} new voxels. Total: {len(world_map)}")
+        save_world_map()
+    else:
+        print("[Memory] Scan received (No new voxels).")
+
+    # 3. Update Brain (using latest snapshot for immediate reaction)
+    # Ideally brain should query world_map, but for now specific scan -> specific path
+    from parkour_brain import brain
     brain.update_state(snapshot.dict())
     
-    return {"ok": True}
+    return {"ok": True, "total_voxels": len(world_map)}
 
 latest_voxel_snapshot = None
+
+@app.get("/v1/mc/map")
+def get_map(since: int = -1):
+    """Returns world map. If 'since' matches current version, returns empty map."""
+    if map_version == since:
+        return {
+            "changed": False,
+            "version": map_version,
+            "players": player_positions # Always return players for live tracking
+        }
+        
+    return {
+        "changed": True,
+        "map": world_map, 
+        "players": player_positions,
+        "version": map_version
+    }
 
 class GameEvent(BaseModel):
     type: str
@@ -141,6 +270,8 @@ def pull_discord_events():
     discord_events = []
     # return events wrapped
     return {"events": events}
+
+# Removed redundant get_world_map route to prevent overwriting the correct versioned endpoint.
 
 def get_latest_voxel():
     if latest_voxel_snapshot is None:
@@ -285,8 +416,23 @@ command_queue: List[Dict[str, Any]] = []
 discord_queue: List[Dict[str, Any]] = []
 
 # LLM Config (LM Studio / Ollama)
-LLM_API_BASE = os.getenv("LLM_API_BASE", "http://127.0.0.1:1234/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "local-model") # LM Studio often ignores model name or uses loaded model
+# LLM Config
+CONFIG_FILE = "ai_config.json"
+# Default Settings
+LLM_API_BASE = "http://127.0.0.1:8001/v1" 
+LLM_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+LLM_API_KEY = os.getenv("LLM_API_KEY", None)
+
+if os.path.exists(CONFIG_FILE):
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+            LLM_API_BASE = config.get("api_base", LLM_API_BASE)
+            LLM_MODEL = config.get("model", LLM_MODEL)
+            LLM_API_KEY = config.get("api_key", LLM_API_KEY)
+            print(f"[Config] Loaded {LLM_MODEL} from {CONFIG_FILE}")
+    except Exception as e:
+        print(f"[Config] Error loading {CONFIG_FILE}: {e}")
 
 def call_llm(prompt: str) -> Optional[str]:
     """LM Studio (OpenAI Compatible) にリクエストを送る"""
@@ -306,14 +452,20 @@ def call_llm(prompt: str) -> Optional[str]:
         # Just going with persistent client or simple one-off.
         
         import requests
+        headers = {}
+        # Use Global Variable configured above
+        if LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+
         resp = requests.post(
             f"{LLM_API_BASE}/chat/completions",
             json={
                 "model": LLM_MODEL,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 300
+                # "max_tokens": 300 # Let model decide or use default
             },
+            headers=headers,
             timeout=10 # Fast timeout
         )
         
@@ -419,6 +571,8 @@ class CommandRequest(BaseModel):
     type: str
     player: str
     target: Optional[str] = None
+
+
 
 @app.post("/v1/mc/command_request")
 async def command_request(cmd: CommandRequest):
