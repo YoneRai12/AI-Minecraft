@@ -1,0 +1,74 @@
+# WaterdogPE Configuration (Enforced)
+# This file is overwritten by the fix script to ensure correctness.
+
+listener:
+  raknet:
+    bind-address: 0.0.0.0:19132
+    motd: "YoneRai12Lobby"
+  priorities:
+    - lobby
+    - jinro
+  host: 0.0.0.0:19132
+  max_players: 20
+  motd: "§bYoneRai12Lobby"
+  name: "§bYoneRai12Lobby"
+  forced_hosts: {}
+  additional_ports: []
+  join_handler: DefaultJoinHandler
+  reconnect_handler: DefaultReconnectHandler
+
+servers:
+  lobby:
+    address: 127.0.0.1:19133
+    public-address: 127.0.0.1:19133
+  jinro:
+    address: 127.0.0.1:19134
+    public-address: 127.0.0.1:19134
+
+default_server: lobby
+
+permissions:
+  default:
+    - bungeecord.command.server
+    - bungeecord.command.list
+    - waterdog.command.help
+    - waterdog.command.info
+    - waterdog.command.endverify
+
+network:
+  compression_level: 6
+  upstream_compression_level: 6
+  enable_ipv6: false
+  debug_packet_log: false
+  enable_debug: false
+  online_mode: true
+  enable_packs: true
+  force_server_packs: false
+  compression: zlib
+  network_settings:
+    connection_throttle: 10
+    connection_throttle_time: 1000
+    enable_ipv6: false
+    max_user_mtu: 1400
+    enable_cookies: true
+    login_throttle: 2
+    max_downstream_mtu: 1400
+    connection_timeout: 15
+  permissions_default:
+    - waterdog.command.help
+    - waterdog.command.info
+  upstream_encryption: true
+  use_login_extras: false
+  use_certificate_payload: true
+  replace_username_spaces: false
+  enable_query: true
+  prefer_fast_transfer: true
+  inject_proxy_commands: true
+  upstream_compression_level: 6
+  downstream_compression_level: 2
+  enable_edu_features: true
+  overwrite_client_packs: false
+  pack_cache_size: 16
+  default_idle_threads: -1
+  enable_statistics: true
+  enable_error_reporting: true

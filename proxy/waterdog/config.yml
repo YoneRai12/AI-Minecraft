@@ -1,0 +1,61 @@
+# Waterdog Main Configuration file
+# Configure your desired network settings here.
+
+listener:
+  motd: §bYoneRai12 Network
+  priority_list:
+  - lobby
+  - jinro
+  host: 0.0.0.0:19132
+  max_players: 200
+  forced_hosts:
+    "127.0.0.2": jinro
+  name: §bYoneRai12 Server
+  priorities:
+  - lobby
+  additional_ports: []
+  join_handler: DefaultJoinHandler
+  reconnect_handler: DefaultReconnectHandler
+servers:
+  lobby:
+    address: 127.0.0.1:19133
+    public_address: 127.0.0.1:19133
+  jinro:
+    address: 127.0.0.1:19134
+    public_address: 127.0.0.1:19134
+permissions:
+  YoneRai12:
+  - waterdog.admin
+  - waterdog.server.transfer
+  - waterdog.server.list
+permissions_default:
+- waterdog.server.transfer
+- waterdog.server.list
+network_settings:
+  connection_throttle: 1000
+  enable_debug: false
+  up_tcp: true
+  down_tcp: true
+inject_proxy_commands: true
+upstream_encryption: true
+online_mode: true
+enable_ipv6: false
+compression: zlib
+raid_protection: false
+max_simultaneous_connections_per_ip: 5
+enable_debug: false
+use_login_extras: false
+use_certificate_payload: true
+replace_username_spaces: false
+enable_query: true
+prefer_fast_transfer: true
+upstream_compression_level: 6
+downstream_compression_level: 2
+enable_edu_features: true
+enable_packs: true
+overwrite_client_packs: false
+force_server_packs: false
+pack_cache_size: 16
+default_idle_threads: -1
+enable_statistics: true
+enable_error_reporting: true
