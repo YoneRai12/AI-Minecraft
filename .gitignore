@@ -1,22 +1,21 @@
-# Server Binaries & Data
-bedrock-server-*/
-waterdog/
-waterdog.zip
+# Server Binaries & Runtimes
+servers/
+bedrock-server-*.zip
+*.mcworld
 
-# Secrets & Authentication
-cache/
-*.json.token
-*.token
+# Configs containing secrets/personal info
+# (Note: We are keeping the templates in system/, but excluding live configs if they exist elsewhere)
+allowlist.json
+permissions.json
 
-# User Specific / Environment
-.venv/
+# Temporary & Cache
+tmp/
+.gemini/
 __pycache__/
 *.log
 
-# Backups
-behavior_packs_OLD/
-*.mcworld
-*_backup/
-
-# Individual Files (if sensitive)
-# force_write_config.py # Contains username in path, but logic is useful. User decides.
+# Archives
+_archive/
+_scripts_old/
+system/preview_bin/
+system/stable_bin/

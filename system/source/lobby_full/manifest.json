@@ -1,0 +1,41 @@
+{
+    "format_version": 2,
+    "header": {
+        "name": "Jinro MOD9",
+        "description": "Full System",
+        "uuid": "c4e8c6fa-ebc2-4f56-b873-11a2cc2f6356",
+        "version": [
+            1,
+            13,
+            0
+        ],
+        "min_engine_version": [
+            1,
+            21,
+            0
+        ]
+    },
+    "modules": [
+        {
+            "type": "script",
+            "language": "javascript",
+            "uuid": "3aa6008f-c4d5-4341-a21d-0bcbf452e3dd",
+            "version": [
+                1,
+                13,
+                0
+            ],
+            "entry": "scripts/main.js"
+        }
+    ],
+    "dependencies": [
+        {
+            "module_name": "@minecraft/server",
+            "version": "1.13.0"
+        },
+        {
+            "module_name": "@minecraft/server-ui",
+            "version": "1.3.0"
+        }
+    ]
+}
