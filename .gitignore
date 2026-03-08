@@ -10,6 +10,7 @@ permissions.json
 
 # Temporary & Cache
 tmp/
+cache/
 .gemini/
 __pycache__/
 *.log
