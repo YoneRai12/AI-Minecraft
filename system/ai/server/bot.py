@@ -312,6 +312,7 @@ def _get_voice_client(guild: discord.Guild):
 
 # Bot Config (Loaded from file)
 BOT_CONFIG_FILE = "bot_config.json"
+COMMAND_API_KEY = os.getenv("MC_COMMAND_API_KEY", "")
 bot_config = {
     "result_channel": None
 }
@@ -356,7 +357,11 @@ class DeathView(discord.ui.View):
             "target": sub_action # reusing target field for sub_action (next/stop)
         }
         async with httpx.AsyncClient() as client:
-             await client.post(f"{POST_BASE}/v1/mc/command_request", json=cmd)
+             await client.post(
+                 f"{POST_BASE}/v1/mc/command_request",
+                 json=cmd,
+                 headers={"x-command-key": COMMAND_API_KEY},
+             )
         await interaction.response.send_message(msg, ephemeral=True)
 
     @discord.ui.button(label="ミュート解除 (30秒)", style=discord.ButtonStyle.green, custom_id="unmute_30s", row=2)
@@ -404,7 +409,11 @@ class TpSelect(discord.ui.Select):
         # Since this callback is async, we can use httpx.
         async with httpx.AsyncClient() as client:
             # We will use valid endpoint. /v1/mc/command_request (New)
-            await client.post(f"{POST_BASE}/v1/mc/command_request", json=cmd)
+            await client.post(
+                f"{POST_BASE}/v1/mc/command_request",
+                json=cmd,
+                headers={"x-command-key": COMMAND_API_KEY},
+            )
         
         await interaction.response.send_message(f"🚀 {target} の元へテレポートします。", ephemeral=True)
 
