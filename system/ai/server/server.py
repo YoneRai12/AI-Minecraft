@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -7,6 +7,7 @@ import json
 import random
 import os
 from typing import List, Optional, Dict, Any
+from pydantic import conint
 
 app = FastAPI()
 
@@ -600,16 +601,43 @@ def poll_commands():
     return {"commands": cmds}
 
 class GameConfig(BaseModel):
-    roles: Dict[str, int]
+    roles: Dict[str, conint(ge=0, le=64)]
+
+
+MAX_TOTAL_ROLE_COUNT = 128
+
+
+def _require_game_admin_token(x_game_token: Optional[str]):
+    expected_token = os.getenv("GAME_ADMIN_TOKEN")
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="Game admin token is not configured")
+    if x_game_token != expected_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _validate_role_config(roles: Dict[str, int]):
+    total_roles = sum(roles.values())
+    if total_roles <= 0:
+        raise HTTPException(status_code=400, detail="At least one role is required")
+    if total_roles > MAX_TOTAL_ROLE_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Total role count must be <= {MAX_TOTAL_ROLE_COUNT}",
+        )
 
 @app.post("/v1/game/start")
-async def start_game():
+async def start_game(x_game_token: Optional[str] = Header(default=None)):
     """Discord等からゲーム開始をトリガーする"""
+    _require_game_admin_token(x_game_token)
     from game_master import gm
     # Current config (can be stored in game_state)
     # For now, default or last config
     config = game_state.get("role_config", {"werewolf": 1})
-    gm.start_game(config)
+    _validate_role_config(config)
+    try:
+        gm.start_game(config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     
     # Send start message to Discord
     discord_queue.append({
@@ -625,8 +653,10 @@ async def start_game():
     return {"status": "started", "config": config}
 
 @app.post("/v1/game/config")
-async def config_game(config: GameConfig):
+async def config_game(config: GameConfig, x_game_token: Optional[str] = Header(default=None)):
     """役職構成を設定する"""
+    _require_game_admin_token(x_game_token)
+    _validate_role_config(config.roles)
     game_state["role_config"] = config.roles
     print(f"Game Config Updated: {config.roles}")
     return {"status": "updated", "config": config.roles}
