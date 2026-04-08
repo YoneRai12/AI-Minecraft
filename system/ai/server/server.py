@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -9,6 +9,26 @@ import os
 from typing import List, Optional, Dict, Any
 
 app = FastAPI()
+
+# Shared token for trusted server-to-server calls.
+# Set AI_SERVER_SHARED_TOKEN in production when exposing the API.
+SHARED_TOKEN = os.getenv("AI_SERVER_SHARED_TOKEN", "")
+
+def _verify_internal_request(request: Request):
+    """Allow local calls by default; require token for non-local clients."""
+    client_host = request.client.host if request.client else ""
+    is_local = client_host in {"127.0.0.1", "::1", "localhost"}
+
+    if SHARED_TOKEN:
+        if request.headers.get("x-api-key") != SHARED_TOKEN:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        return
+
+    if not is_local:
+        raise HTTPException(
+            status_code=401,
+            detail="remote access requires AI_SERVER_SHARED_TOKEN",
+        )
 
 # Mount Debug Frontend
 if not os.path.exists("debug_frontend"):
@@ -506,9 +526,10 @@ async def discord_report(data: DiscordReportData):
     return {"status": "ok"}
 
 @app.post("/v1/report")
-async def report(data: ReportData):
+async def report(data: ReportData, request: Request):
     """マイクラからの状況報告を受け取る"""
     global game_state, discord_queue
+    _verify_internal_request(request)
     
     # プレイヤー位置更新
     game_state["players"] = [p.dict() for p in data.players]
