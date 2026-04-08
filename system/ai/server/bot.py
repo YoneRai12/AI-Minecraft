@@ -28,6 +28,8 @@ import asyncio
 import httpx
 
 POST_BASE = os.getenv("MC_API_BASE", "http://127.0.0.1:8082")
+API_AUTH_TOKEN = os.getenv("AI_SERVER_TOKEN", "")
+API_HEADERS = {"x-api-key": API_AUTH_TOKEN} if API_AUTH_TOKEN else {}
 audio = AudioProcessor(post_url=POST_BASE)
 speaker = DiscordSpeaker()
 
@@ -138,7 +140,7 @@ class RoleConfigView(discord.ui.View):
     async def save_config(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Send to server
         try:
-             async with httpx.AsyncClient() as client:
+             async with httpx.AsyncClient(headers=API_HEADERS) as client:
                 resp = await client.post(f"{POST_BASE}/v1/game/config", json={"roles": self.config}, timeout=5.0)
                 if resp.status_code == 200:
                     await interaction.response.send_message(f"✅ 設定を保存しました！\n{self.config}", ephemeral=False)
@@ -204,7 +206,7 @@ class UnmuteView(discord.ui.View):
 
 async def poll_server_for_speech():
     """定期的にServerに聞きに行き、喋る内容があればVCで再生する"""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=API_HEADERS) as client:
         while True:
             try:
                 # 誰かがいるVCを探して再生対象にする (簡易ロジック: 最初のVoiceClient)
@@ -355,7 +357,7 @@ class DeathView(discord.ui.View):
             "player": self.victim_mc_name,
             "target": sub_action # reusing target field for sub_action (next/stop)
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers=API_HEADERS) as client:
              await client.post(f"{POST_BASE}/v1/mc/command_request", json=cmd)
         await interaction.response.send_message(msg, ephemeral=True)
 
@@ -402,7 +404,7 @@ class TpSelect(discord.ui.Select):
         }
         # We need to push this to Server. 
         # Since this callback is async, we can use httpx.
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers=API_HEADERS) as client:
             # We will use valid endpoint. /v1/mc/command_request (New)
             await client.post(f"{POST_BASE}/v1/mc/command_request", json=cmd)
         
@@ -416,7 +418,7 @@ async def set_result_channel(interaction: discord.Interaction, channel: discord.
 
 async def poll_server_for_speech():
     """定期的にServerに聞きに行き、喋る内容があればVCで再生する"""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=API_HEADERS) as client:
         while True:
             try:
                 # 誰かがいるVCを探して再生対象にする (簡易ロジック: 最初のVoiceClient)
@@ -550,7 +552,7 @@ async def leave(interaction: discord.Interaction):
 @bot.tree.command(name="game_start", description="人狼ゲームを開始", guild=discord.Object(id=GUILD_ID) if GUILD_ID else None)
 async def game_start(interaction: discord.Interaction):
     """ゲームを開始するリクエストをサーバーに送る"""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=API_HEADERS) as client:
         try:
             resp = await client.post(f"{POST_BASE}/v1/game/start", timeout=10.0)
             if resp.status_code == 200:
@@ -571,7 +573,7 @@ async def set_role(interaction: discord.Interaction, config_str: str):
             key, val = part.split(":")
             roles[key] = int(val)
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers=API_HEADERS) as client:
             resp = await client.post(f"{POST_BASE}/v1/game/config", json={"roles": roles}, timeout=5.0)
             if resp.status_code == 200:
                 await interaction.response.send_message(f"役職設定を更新しました: {roles}", ephemeral=False)
