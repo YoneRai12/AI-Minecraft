@@ -46,9 +46,14 @@ class GameMaster:
         player_names = list(self.state.players.keys())
         random.shuffle(player_names)
         
+        if not role_distribution:
+            raise ValueError("role_distribution must not be empty")
+
         # Simple role assignment logic (expand later)
         assigned_roles = []
         for role, count in role_distribution.items():
+            if count < 0:
+                raise ValueError(f"Role count must be >= 0: {role}")
             assigned_roles.extend([role] * count)
         
         # Fill rest with villagers
