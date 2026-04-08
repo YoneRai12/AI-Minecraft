@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -18,6 +18,10 @@ app.mount("/debug", StaticFiles(directory="debug_frontend", html=True), name="de
 # 設定
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3.1" # RTX 5080 (16GB VRAM) 推奨
+COMMAND_API_KEY = os.getenv("MC_COMMAND_API_KEY")
+
+if not COMMAND_API_KEY:
+    print("[Security] MC_COMMAND_API_KEY is not set. /v1/mc/command_request is disabled.")
 
 # データモデル
 class PlayerData(BaseModel):
@@ -575,8 +579,13 @@ class CommandRequest(BaseModel):
 
 
 @app.post("/v1/mc/command_request")
-async def command_request(cmd: CommandRequest):
+async def command_request(cmd: CommandRequest, x_command_key: Optional[str] = Header(None)):
     """Discord Botからのコマンドキュー追加リクエスト"""
+    if not COMMAND_API_KEY:
+        raise HTTPException(status_code=503, detail="Command API is disabled")
+    if x_command_key != COMMAND_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     # Simply push to command_queue for Minecraft to pick up
     target_action = {
         "action": cmd.type,
