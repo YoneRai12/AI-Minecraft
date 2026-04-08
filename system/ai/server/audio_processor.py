@@ -186,6 +186,10 @@ class AudioProcessor:
         queue_max: int = 2000,
     ) -> None:
         self.post_url = post_url.rstrip("/")
+        self.api_headers = {}
+        api_token = os.getenv("AI_SERVER_TOKEN", "")
+        if api_token:
+            self.api_headers["x-api-key"] = api_token
         self.on_transcript = on_transcript
 
         self._q: asyncio.Queue[tuple[int, bytes, float]] = asyncio.Queue(maxsize=queue_max)
@@ -212,7 +216,7 @@ class AudioProcessor:
             pass
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, headers=self.api_headers) as client:
             while True:
                 uid, frame, ts = await self._q.get()
 
