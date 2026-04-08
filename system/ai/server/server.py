@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -6,9 +6,28 @@ import requests
 import json
 import random
 import os
+import hmac
 from typing import List, Optional, Dict, Any
 
 app = FastAPI()
+
+API_AUTH_TOKEN = os.getenv("AI_SERVER_TOKEN", "")
+
+def verify_api_key(request: Request):
+    """Simple shared-secret auth for bot-control endpoints."""
+    if not API_AUTH_TOKEN:
+        raise HTTPException(status_code=503, detail="AI_SERVER_TOKEN is not configured")
+
+    header_token = request.headers.get("x-api-key")
+    auth_header = request.headers.get("authorization", "")
+
+    bearer_token = ""
+    if auth_header.lower().startswith("bearer "):
+        bearer_token = auth_header[7:].strip()
+
+    candidate = header_token or bearer_token
+    if not candidate or not hmac.compare_digest(candidate, API_AUTH_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # Mount Debug Frontend
 if not os.path.exists("debug_frontend"):
@@ -120,7 +139,7 @@ load_world_map()
 player_positions = {}
 
 @app.post("/v1/mc/player")
-def update_player(info: PlayerInfo):
+def update_player(info: PlayerInfo, _: None = Depends(verify_api_key)):
     """Update player position (High frequency)"""
     player_positions[info.name] = info.dict()
     return {"status": "ok"}
@@ -129,7 +148,7 @@ def update_player(info: PlayerInfo):
 map_version = 0
 
 @app.post("/v1/mc/state")
-def receive_state(snapshot: VoxelSnapshot):
+def receive_state(snapshot: VoxelSnapshot, _: None = Depends(verify_api_key)):
     """マイクラからの視界データ(Voxel)を受け取る & 長期記憶にマージ"""
     global latest_voxel_snapshot, world_map, map_version
     
@@ -220,7 +239,7 @@ class GameEvent(BaseModel):
     timestamp: float
 
 @app.post("/v1/mc/events")
-def receive_event(evt: GameEvent):
+def receive_event(evt: GameEvent, _: None = Depends(verify_api_key)):
     """マイクラからのイベント受信"""
     if evt.type == "hit":
         print(f"🔥 {evt.victim} was hit by {evt.attacker}!")
@@ -234,7 +253,7 @@ class UnmuteRequest(BaseModel):
     mcName: str
 
 @app.post("/v1/discord/unmute")
-def request_unmute(req: UnmuteRequest):
+def request_unmute(req: UnmuteRequest, _: None = Depends(verify_api_key)):
     """Ghost Modeからのミュート解除リクエスト"""
     # Simply fire a 'speak' event or specialized unmute event that bot polls
     # We reuse 'discord_report' queue logic?
@@ -264,7 +283,7 @@ def request_unmute(req: UnmuteRequest):
 discord_events = []
 
 @app.post("/v1/discord/pull")
-def pull_discord_events():
+def pull_discord_events(_: None = Depends(verify_api_key)):
     global discord_events
     events = discord_events[:]
     discord_events = []
@@ -290,7 +309,7 @@ def get_latest_voxel():
     return data
     
 @app.post("/v1/mc/next_move")
-def get_next_move(player_name: str = "Bot"): 
+def get_next_move(player_name: str = "Bot", _: None = Depends(verify_api_key)): 
     """Botの次の動作を決定して返す (High-Frequency Polling)"""
     from parkour_brain import brain
     
@@ -488,7 +507,7 @@ def call_llm(prompt: str) -> Optional[str]:
 
 
 @app.post("/v1/discord/report")
-async def discord_report(data: DiscordReportData):
+async def discord_report(data: DiscordReportData, _: None = Depends(verify_api_key)):
     """Discordからの音声認識結果を受け取る"""
     global game_state
     
@@ -506,7 +525,7 @@ async def discord_report(data: DiscordReportData):
     return {"status": "ok"}
 
 @app.post("/v1/report")
-async def report(data: ReportData):
+async def report(data: ReportData, _: None = Depends(verify_api_key)):
     """マイクラからの状況報告を受け取る"""
     global game_state, discord_queue
     
@@ -553,7 +572,7 @@ async def report(data: ReportData):
     return {"status": "ok", "commands": minecraft_commands}
 
 @app.post("/v1/discord/pull")
-async def discord_pull():
+async def discord_pull(_: None = Depends(verify_api_key)):
     """Discord Botからのポーリングに対し、溜まっている発言キューを返す"""
     global discord_queue
     
@@ -575,7 +594,7 @@ class CommandRequest(BaseModel):
 
 
 @app.post("/v1/mc/command_request")
-async def command_request(cmd: CommandRequest):
+async def command_request(cmd: CommandRequest, _: None = Depends(verify_api_key)):
     """Discord Botからのコマンドキュー追加リクエスト"""
     # Simply push to command_queue for Minecraft to pick up
     target_action = {
@@ -589,7 +608,7 @@ async def command_request(cmd: CommandRequest):
     return {"status": "queued"}
 
 @app.get("/v1/mc/commands")
-def poll_commands():
+def poll_commands(_: None = Depends(verify_api_key)):
     """Minecraft側が溜まっているコマンドを取りに来る"""
     global command_queue
     if not command_queue:
@@ -603,7 +622,7 @@ class GameConfig(BaseModel):
     roles: Dict[str, int]
 
 @app.post("/v1/game/start")
-async def start_game():
+async def start_game(_: None = Depends(verify_api_key)):
     """Discord等からゲーム開始をトリガーする"""
     from game_master import gm
     # Current config (can be stored in game_state)
@@ -625,7 +644,7 @@ async def start_game():
     return {"status": "started", "config": config}
 
 @app.post("/v1/game/config")
-async def config_game(config: GameConfig):
+async def config_game(config: GameConfig, _: None = Depends(verify_api_key)):
     """役職構成を設定する"""
     game_state["role_config"] = config.roles
     print(f"Game Config Updated: {config.roles}")
@@ -635,7 +654,7 @@ class AiModeConfig(BaseModel):
     mode: str # 'player' or 'gm'
 
 @app.post("/v1/game/ai_mode")
-async def set_ai_mode(config: AiModeConfig):
+async def set_ai_mode(config: AiModeConfig, _: None = Depends(verify_api_key)):
     game_state["ai_mode"] = config.mode
     print(f"AI Mode switched to: {config.mode}")
     return {"status": "updated", "mode": config.mode}
@@ -714,4 +733,4 @@ async def think_and_queue():
 
 if __name__ == "__main__":
     print(f"Starting FastAPI Server on port 8082 (Model: {MODEL_NAME})...")
-    uvicorn.run(app, host="0.0.0.0", port=8082)
+    uvicorn.run(app, host=os.getenv("AI_SERVER_HOST", "127.0.0.1"), port=8082)
