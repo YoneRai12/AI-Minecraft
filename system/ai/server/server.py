@@ -236,40 +236,12 @@ class UnmuteRequest(BaseModel):
 @app.post("/v1/discord/unmute")
 def request_unmute(req: UnmuteRequest):
     """Ghost Modeからのミュート解除リクエスト"""
-    # Simply fire a 'speak' event or specialized unmute event that bot polls
-    # We reuse 'discord_report' queue logic?
-    # Or create a new event type in the shared queue which bot polls via /pull
-    
-    # We append to 'events' queue that bot.py polls.
-    # Where is that queue stored?
-    # server.py doesn't seem to have a persistent event queue for Discord polling in the snippet I saw?
-    # Let's check 'ChatData' or 'ReportData'?
-    # Ah, 'command_queue' is for MC.
-    # We need a queue for Discord.
-    
-    # Let's add it to a global 'discord_events' list if not exists, or just print for now if bot.py polls logs (unlikely).
-    # Re-reading bot.py (Step 984), it polls POST_BASE/v1/discord/pull.
-    # Let's check server.py endpoint for /pull.
-    # If not found, I need to add it.
-    
-    global discord_events
-    discord_events.append({
-        "type": "mute", # Using 'mute' with 'target' to force unmute?
-        # unique event for unmuting
+    global discord_queue
+    discord_queue.append({
         "type": "unmute_request",
         "mc_name": req.mcName
     })
     return {"status": "ok"}
-
-discord_events = []
-
-@app.post("/v1/discord/pull")
-def pull_discord_events():
-    global discord_events
-    events = discord_events[:]
-    discord_events = []
-    # return events wrapped
-    return {"events": events}
 
 # Removed redundant get_world_map route to prevent overwriting the correct versioned endpoint.
 
