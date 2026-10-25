@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -6,9 +6,12 @@ import requests
 import json
 import random
 import os
+import hmac
 from typing import List, Optional, Dict, Any
 
 app = FastAPI()
+
+ADMIN_API_TOKEN = os.getenv("AI_SERVER_ADMIN_TOKEN", "")
 
 # Mount Debug Frontend
 if not os.path.exists("debug_frontend"):
@@ -64,8 +67,9 @@ def custom_print(*args, **kwargs):
 builtins.print = custom_print
 
 @app.get("/v1/system/logs")
-def get_logs(since: int = -1):
+def get_logs(request: Request, since: int = -1, x_api_key: Optional[str] = Header(default=None)):
     """Fetch logs since a cursor ID"""
+    _require_sensitive_read_auth(request, x_api_key)
     if since < 0:
         # Return last 50
         return {"logs": list(LOG_BUFFER)[-50:], "cursor": log_cursor_counter}
@@ -196,9 +200,28 @@ def receive_state(snapshot: VoxelSnapshot):
 
 latest_voxel_snapshot = None
 
+def _require_sensitive_read_auth(request: Request, x_api_key: Optional[str]):
+    """Protect sensitive read APIs.
+
+    - If AI_SERVER_ADMIN_TOKEN is set, callers must send matching X-API-Key.
+    - If unset, only localhost callers are accepted as a safe default.
+    """
+    if ADMIN_API_TOKEN:
+        if not x_api_key or not hmac.compare_digest(x_api_key, ADMIN_API_TOKEN):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return
+
+    client_ip = request.client.host if request.client else ""
+    if client_ip not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Sensitive endpoint is localhost-only unless AI_SERVER_ADMIN_TOKEN is configured",
+        )
+
 @app.get("/v1/mc/map")
-def get_map(since: int = -1):
+def get_map(request: Request, since: int = -1, x_api_key: Optional[str] = Header(default=None)):
     """Returns world map. If 'since' matches current version, returns empty map."""
+    _require_sensitive_read_auth(request, x_api_key)
     if map_version == since:
         return {
             "changed": False,
