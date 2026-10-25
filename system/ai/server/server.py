@@ -305,9 +305,10 @@ def get_next_move(player_name: str = "Bot"):
         
         # Check active CHASE target
         if brain.target_player:
-            target_p = next((p for p in gm.state.players if p.name == brain.target_player), None)
-            if target_p:
-                dist = _calc_dist(latest_voxel_snapshot["origin"], target_p.location)
+            target_p = player_positions.get(brain.target_player)
+            target_pos = target_p.get("pos") if target_p else None
+            if target_pos:
+                dist = _calc_dist(latest_voxel_snapshot["origin"], target_pos)
                 if dist > 30: 
                     print(f"Chase: Lost target (too far {dist:.1f})")
                     brain.target_player = None
@@ -315,7 +316,7 @@ def get_next_move(player_name: str = "Bot"):
                     print(f"Chase: Caught up!")
                     # Attack Logic could go here (send 'attack' command?)
                 else:
-                    target_rel = _calc_rel(latest_voxel_snapshot["origin"], target_p.location)
+                    target_rel = _calc_rel(latest_voxel_snapshot["origin"], target_pos)
                     has_target = True
             else:
                 brain.target_player = None
@@ -325,19 +326,22 @@ def get_next_move(player_name: str = "Bot"):
         if not has_target:
             my_pos = latest_voxel_snapshot["origin"]
             
-            for p_name, p_state in gm.state.players.items():
+            for p_name, p_state in player_positions.items():
                 if p_name == player_name: continue
-                if not p_state.is_alive: continue
-                # Skip spectators
-                if "spectator" in p_state.role or "ghost" in p_state.tags: continue
+                gm_player = gm.state.players.get(p_name)
+                if gm_player and not gm_player.is_alive: continue
+                if gm_player and "spectator" in gm_player.role: continue
+                p_pos = p_state.get("pos")
+                p_rot = p_state.get("rot")
+                if not p_pos or not p_rot: continue
 
                 # Check if looking at me
                 # Vector from Them -> Me
-                dx = my_pos["x"] - p_state.location["x"]
-                dz = my_pos["z"] - p_state.location["z"]
+                dx = my_pos["x"] - p_pos["x"]
+                dz = my_pos["z"] - p_pos["z"]
                 dist = (dx**2 + dz**2)**0.5
                 
-                if dist < 20: # Only care if close enough
+                if 0 < dist < 20: # Only care if close enough
                      # Normalize direction to me
                      dir_to_me = {"x": dx/dist, "z": dz/dist}
                      
@@ -345,7 +349,7 @@ def get_next_move(player_name: str = "Bot"):
                      # Yaw in MC: 0=South(+Z), 90=West(-X), 180=North(-Z), -90=East(+X)
                      # Convert to Rad
                      import math
-                     yaw_rad = (p_state.rotation["y"] + 90) * (math.pi / 180)
+                     yaw_rad = (p_rot["y"] + 90) * (math.pi / 180)
                      # View Vector (2D XZ)
                      view_x = math.cos(yaw_rad)
                      view_z = math.sin(yaw_rad)
@@ -363,7 +367,7 @@ def get_next_move(player_name: str = "Bot"):
                          # For MVP: Just set them as target (Bot will walk to them slowly/creepy).
                          # Or verify logic: if we set target, brain pathfinds.
                          # Let's say "If watched, approach slowly" (Creepy).
-                         target_rel = _calc_rel(my_pos, p_state.location)
+                         target_rel = _calc_rel(my_pos, p_pos)
                          has_target = True
                          # print(f"Observe: {p_name} is watching! Staring back.")
                          break
@@ -375,21 +379,23 @@ def get_next_move(player_name: str = "Bot"):
             min_d = 999
             my_pos = latest_voxel_snapshot["origin"]
             
-            for p_name, p_state in gm.state.players.items():
+            for p_name, p_state in player_positions.items():
                 if p_name == player_name: continue
-                if not p_state.is_alive: continue
-                # Skip spectators/ghosts? 
-                if "spectator" in p_state.role or "ghost" in p_state.tags: continue # Simple check
+                gm_player = gm.state.players.get(p_name)
+                if gm_player and not gm_player.is_alive: continue
+                if gm_player and "spectator" in gm_player.role: continue
+                p_pos = p_state.get("pos")
+                if not p_pos: continue
                 
-                d = _calc_dist(my_pos, p_state.location)
+                d = _calc_dist(my_pos, p_pos)
                 if d < min_d:
                     min_d = d
-                    nearest = p_state
+                    nearest = p_pos
             
             # Logic: If isolated (> 8 blocks), move closer. If too close (< 3), stop/back up.
             if nearest and min_d > 5.0 and min_d < 50.0:
                  # print(f"Group: Moving to {nearest.name} ({min_d:.1f}m)")
-                 target_rel = _calc_rel(my_pos, nearest.location)
+                 target_rel = _calc_rel(my_pos, nearest)
                  has_target = True
         
         # --- Priority 3: Wander (Handled by Brain fallback) ---
