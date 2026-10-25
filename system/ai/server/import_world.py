@@ -3,23 +3,35 @@ import zipfile
 import shutil
 import sys
 import json
+from pathlib import Path
 
 # Note: This script requires 'pybedrock' or similar library to read LevelDB.
 # Since installation on Windows can be tricky, this script currently 
 # demonstrates the logic of extracting the .mcworld file.
 
+def _safe_extract_zip(zip_ref, extract_dir):
+    base_path = Path(extract_dir).resolve()
+
+    for member in zip_ref.infolist():
+        member_path = (base_path / member.filename).resolve()
+        if os.path.commonpath([str(base_path), str(member_path)]) != str(base_path):
+            raise ValueError(f"Unsafe archive entry detected: {member.filename}")
+
+    zip_ref.extractall(extract_dir)
+
+
 def import_world(file_path):
     print(f"Loading world file: {file_path}")
-    
+
     # 1. Extract .mcworld (it's a ZIP)
     extract_dir = "temp_world_data"
     if os.path.exists(extract_dir):
         shutil.rmtree(extract_dir)
     os.makedirs(extract_dir)
-    
+
     try:
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_dir)
+            _safe_extract_zip(zip_ref, extract_dir)
         print(f"Extracted to: {extract_dir}")
         
         # 2. Locate db/ folder
@@ -86,6 +98,8 @@ def import_world(file_path):
         
     except zipfile.BadZipFile:
         print("Error: Invalid .mcworld file.")
+    except ValueError as e:
+        print(f"Error: {e}")
     except Exception as e:
         print(f"Error: {e}")
 
